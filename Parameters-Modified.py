@@ -50,9 +50,14 @@ params = {
 }
 
 def hard_constraint(x, y):
-    X = x[0]
-    Y = x[1]
-    tau = x[-1]
+    if x.dim() == 1:
+        X = x[0]
+        Y = x[1]
+        tau = x[2]
+    else:
+        X = x[:, 0]
+        Y = x[:, 1]
+        tau = x[:, 2]
     U = ((X-1)*X*(Y-1)*Y*t_f*tau)*(1/delta_u) - (u_min/delta_u)
     return U
 
@@ -67,10 +72,9 @@ def f(sample):
 
 
 def pde_fn(model, sample):
-
     # Physics Parameters
-    sigma = 1.0 #kg/m^2
-    T = 25.0  #N/m
+    sigma = 1.0  # kg/m^2
+    T = 25.0  # N/m
     v = (T / sigma)**0.5 
 
     a = (v**2)*(t_f**2)/(delta_x**2)
@@ -81,18 +85,19 @@ def pde_fn(model, sample):
 
     print("Dimensione di J:", J.shape)
 
-    dX = J[0][0]
-    dY = J[0][1]
-    dtau = J[0][-1]
-    #H = _jacobian(d, sample)[0]
-    #ddX = H[0][0, 0]
-    #ddtau = H[0][-1, -1]
-    ddX = _jacobian(d, sample, i=0, j=0)[0][0]
-    ddY = _jacobian(d, sample, i=1, j=1)[0][0]
-    ddtau = _jacobian(d, sample, i=2, j=2)[0][0]
+    # Ensure J is 2D
+    if J.dim() == 1:
+        J = J.unsqueeze(0)
 
-    return ddtau - (a*ddX + b*ddY) - c* f(sample)
+    dX = J[:, 0]
+    dY = J[:, 1]
+    dtau = J[:, 2]
 
+    ddX = _jacobian(d, sample, i=0, j=0)[0]
+    ddY = _jacobian(d, sample, i=1, j=1)[0]
+    ddtau = _jacobian(d, sample, i=2, j=2)[0]
+
+    return ddtau - (a*ddX + b*ddY) - c * f(sample)
 
 def ic_fn_vel(model, sample):
     J, d = _jacobian(model, sample)
@@ -110,7 +115,7 @@ domainDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, 10000, period =
 print("Building IC Dataset")
 icDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 10000, period = 3)
 print("Building Domain Supervised Dataset")
-dsdDataset = DomainSupervisedDataset("C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN\\membrane.csv", 1000)
+dsdDataset = DomainSupervisedDataset("membrane.csv", 1000)
 print("Building Validation Dataset")
 validationDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, batchsize, shuffle = False)
 print("Building Validation IC Dataset")

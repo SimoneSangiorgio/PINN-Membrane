@@ -18,8 +18,8 @@ def ic_loss(model, ic_fn, x, t):
     loss_ic = torch.mean((u.flatten() - true.flatten())**2)
     return loss_ic
 
-def dsd_loss(model, u_true, x, t):
-    x_in = torch.hstack((x, t))
+def dsd_loss(model, u_true, x, y, t):
+    x_in = torch.hstack((x, y, t))
     u = model(x_in)
     loss_dsd = torch.mean((u.flatten() - u_true.flatten())**2)
     return loss_dsd
@@ -38,11 +38,12 @@ def compute_loss_ic(model, ic_fns, x_ic):
     return loss_ic
 
 def compute_loss_dsd(model, x_dsd):
-    splitted_dataset = torch.hsplit(x_dsd, [x_dsd.shape[1] - 2, x_dsd.shape[1] - 1])
+    splitted_dataset = torch.hsplit(x_dsd, [x_dsd.shape[1] - 3, x_dsd.shape[1] - 2, x_dsd.shape[1] - 1])
     x = splitted_dataset[0]
-    t = splitted_dataset[1]
-    u_true = splitted_dataset[2]
-    loss_dsd = vmap(partial(dsd_loss, model, u_true), (0, 0))(x, t)
+    y = splitted_dataset[1]
+    t = splitted_dataset[2]
+    u_true = splitted_dataset[3]
+    loss_dsd = vmap(partial(dsd_loss, model, u_true), (0, 0, 0))(x, y, t)
     return loss_dsd
 
 def compute_loss_r_time_causality(model, pde_fn, eps_time, x_in):
@@ -61,7 +62,7 @@ def compute_loss_r(model, pde_fn, x_in):
     splitted_dataset = torch.hsplit(x_in, [x_in.shape[1] - 1])
     x = splitted_dataset[0]
     t = splitted_dataset[1]
-    loss_r = vmap(partial(residual_loss, model, pde_fn), (0, 0))(x, t)
+    loss_r = vmap(lambda x, t: residual_loss(model, pde_fn, x.unsqueeze(0), t.unsqueeze(0)))(x, t)
     return loss_r
 
 

@@ -40,16 +40,17 @@ class DomainSupervisedDataset(Dataset):
         with open(self.path, "r") as f:
             for line in f:
                 line = line.split(",")
-                s = line[2].strip()
+                s = line[3].strip()  # Assuming the solution is now in the 4th column
                 s = s.replace('"', '').replace("{", "").replace("}", "").replace("*^", "E")
                 s = float(s)
                 x = float(line[0])
-                t = float(line[1])
+                y = float(line[1])  # Add y coordinate
+                t = float(line[2])  # t is now in the 3rd column
                 if t_max != None:
                     if t <= t_max:
-                        sol.append([x, t, s])
+                        sol.append([x, y, t, s])  # Include y in the solution
                 else:
-                    sol.append([x, t, s])
+                    sol.append([x, y, t, s])  # Include y in the solution
         return np.array(sol)
 
 class DomainDataset(Dataset):
