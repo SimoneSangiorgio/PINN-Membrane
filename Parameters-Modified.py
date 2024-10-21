@@ -96,7 +96,7 @@ def pde_fn(model, sample):
 
 def ic_fn_vel(model, sample):
     J, d = _jacobian(model, sample)
-    dtau = J[-1]
+    dtau = J[0][-1]
     dt = dtau*delta_u/t_f
     ics = torch.zeros_like(dt)
     return dt, ics
@@ -109,8 +109,8 @@ print("Building Domain Dataset")
 domainDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, 10000, period = 3)
 print("Building IC Dataset")
 icDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 10000, period = 3)
-print("Building Domain Supervised Dataset")
-dsdDataset = DomainSupervisedDataset("C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN\\membrane.csv", 1000)
+#print("Building Domain Supervised Dataset")
+#dsdDataset = DomainSupervisedDataset("C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN\\membrane.csv", 1000)
 print("Building Validation Dataset")
 validationDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, batchsize, shuffle = False)
 print("Building Validation IC Dataset")
