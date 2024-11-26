@@ -102,7 +102,7 @@ print("Building Validation IC Dataset")
 validationicDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), batchsize, shuffle = False)
 
 encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
-model = ModifiedMLP([num_inputs] + [308]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
+model = ModifiedMLP([num_inputs] + [308]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.1, encoding = None)
 
 component_manager = ComponentManager()
 r = ResidualComponent(pde_fn, domainDataset)

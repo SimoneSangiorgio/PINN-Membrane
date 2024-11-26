@@ -6,6 +6,15 @@ from collections import OrderedDict
 import math
 
 
+import torch
+import torch.nn as nn
+import numpy as np
+from collections import OrderedDict
+
+import torch
+import torch.nn as nn
+import numpy as np
+
 class ModifiedMLP(nn.Module):
     def __init__(self, layers, activation_function, hard_constraint_fn=None, p_dropout=0.2, encoding=None) -> None:
         super(ModifiedMLP, self).__init__()
@@ -16,38 +25,61 @@ class ModifiedMLP(nn.Module):
         if encoding != None:
             encoding.setup(self)
         
-        self.U = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
-        self.V = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
+        # Transformer networks U and V (equation 43)
+        self.U = nn.Sequential(
+            nn.Linear(self.layers[0], self.layers[1]), 
+            self.activation()
+        )
+        self.V = nn.Sequential(
+            nn.Linear(self.layers[0], self.layers[1]), 
+            self.activation()
+        )
 
-        layer_list = nn.ModuleList()        
-        for i in range(0, len(self.layers)-2):
-            layer_list.append(
-                nn.Linear(layers[i], layers[i+1])
-            )
-            layer_list.append(self.activation())
-            layer_list.append(Transformer())
-            layer_list.append(nn.Dropout(p = p_dropout))
-        self.hidden_layer = layer_list
-        self.output_layer = nn.Linear(self.layers[-2], self.layers[-1])
-
-        self.hard_constraint_fn = hard_constraint_fn
+        # Hidden layers
+        self.hidden_layers = nn.ModuleList()
         
+        # First hidden layer - H⁽¹⁾ = φ(XWz,1 + bz,1)
+        self.first_layer = nn.Sequential(
+            nn.Linear(self.layers[0], self.layers[1]),
+            self.activation()
+        )
+        
+        # Z layers - Z⁽ᵏ⁾ = φ(H⁽ᵏ⁾Wz,k + bz,k)
+        for i in range(len(self.layers)-2):
+            self.hidden_layers.append(
+                nn.Sequential(
+                    nn.Linear(self.layers[1], self.layers[1]),
+                    self.activation(),
+                    nn.Dropout(p=p_dropout)
+                )
+            )
+            
+        # Output layer
+        self.output_layer = nn.Linear(self.layers[1], self.layers[-1])
+        
+        self.hard_constraint_fn = hard_constraint_fn
 
     def forward(self, x):
         orig_x = x
         if self.encoding != None:
             x = self.encoding(x)
 
+        # Calculate U and V (equation 43)
         U = self.U(orig_x)
         V = self.V(orig_x)
-
-        output = x
-        for i in range(0, len(self.hidden_layer), 4):
-            output = self.hidden_layer[i](output) #Linear
-            output = self.hidden_layer[i+1](output) #Activation
-            output = self.hidden_layer[i+2](output, U, V) #Transformer
-            output = self.hidden_layer[i+3](output) #Dropout
-        output = self.output_layer(output)
+        
+        # First hidden layer (equation 44)
+        H = self.first_layer(x)
+        
+        # Process through hidden layers (equations 45-46)
+        for layer in self.hidden_layers:
+            # Calculate Z⁽ᵏ⁾ = φ(H⁽ᵏ⁾Wz,k + bz,k)
+            Z = layer(H)
+            # Calculate H⁽ᵏ⁺¹⁾ = (1-Z⁽ᵏ⁾)U + Z⁽ᵏ⁾V
+            H = torch.multiply(1-Z, U) + torch.multiply(Z, V)
+        
+        # Output layer (equation 47)
+        output = self.output_layer(H)
 
         if self.hard_constraint_fn != None:
             output = self.hard_constraint_fn(orig_x, output)
