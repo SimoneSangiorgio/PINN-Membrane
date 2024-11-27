@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import numpy as np
-from pinns_v2.rff import GaussianEncoding
 from collections import OrderedDict
 import math
 
@@ -21,9 +19,7 @@ class ModifiedMLP(nn.Module):
 
         layer_list = nn.ModuleList()        
         for i in range(0, len(self.layers)-2):
-            layer_list.append(
-                nn.Linear(layers[i], layers[i+1])
-            )
+            layer_list.append(nn.Linear(layers[i], layers[i+1]))
             layer_list.append(self.activation())
             layer_list.append(Transformer())
             layer_list.append(nn.Dropout(p = p_dropout))
@@ -146,4 +142,61 @@ class FactorizedModifiedLinear(FactorizedLinear):
         return torch.nn.functional.linear(torch.multiply(x, U) + torch.multiply((1-x), V), self.s*self.v, self.bias)
 
 
-					
+class ImprovedMLP(nn.Module):
+    def __init__(self, layers, activation_function, hard_constraint_fn=None, p_dropout=0.2, encoding=None):
+        super(ImprovedMLP, self).__init__()
+        
+        self.layers = layers
+        self.activation = activation_function
+        self.hard_constraint_fn = hard_constraint_fn
+
+        self.encoding = encoding
+        if encoding:
+            encoding.setup(self)
+
+        '''U = φ(XW_1 + b_1)'''
+        self.U = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
+        '''V = φ(XW_2 + b_2)'''
+        self.V = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
+
+        # Livelli nascosti con connessioni residue
+        self.hidden_layers = nn.ModuleList()
+        for i in range(0, len(layers) - 2):
+            '''Z_k = φ(H_k W_{z,k} + b_{z,k}) ∀ k = 1,...,L'''
+            self.hidden_layers.append(nn.Linear(layers[i], layers[i+1]))
+            self.hidden_layers.append(self.activation())
+            #self.hidden_layers.append(Transformer())
+            self.hidden_layers.append(nn.Dropout(p=p_dropout))
+
+        '''f_θ(x) = H^(L+1)W + b'''
+        self.output_layer = nn.Linear(layers[-2], layers[-1])
+
+    def forward(self, x):
+        orig_x = x
+
+        if self.encoding:
+            x = self.encoding(x)
+
+        # Genera trasformazioni U e V
+        U = self.U(orig_x)
+        V = self.V(orig_x)
+
+        # Propagazione nei livelli nascosti con connessioni residue
+        for i in range(0, len(self.hidden_layers), 4):  # 4: Linear -> Activation -> Transformer -> Dropout
+            '''Z_k = φ(H_k W_{z,k} + b_{z,k})    ∀ k = 1,...,L'''
+            Z = self.hidden_layers[i](x) #Linear
+            Z = self.hidden_layers[i + 1](Z)  # Activation
+            #Z = self.hidden_layers[i + 2](Z, U, V) #Transformer
+            Z = self.hidden_layers[i + 2](Z)  # Dropout
+
+            '''H_{k+1} = (1 - Z_k) ⊙ U + Z_k ⊙ V    ∀ k = 1,...,L'''
+            x = (1 - Z) * U + Z * V
+
+        # Propagazione finale
+        '''f_θ(x) = H^(L+1)W + b'''
+        x = self.output_layer(x)
+
+        if self.hard_constraint_fn:
+            x = self.hard_constraint_fn(orig_x, x)
+
+        return x					
