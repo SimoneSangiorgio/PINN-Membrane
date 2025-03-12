@@ -9,6 +9,7 @@ import numpy as np
 from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
+from pinns_v2.implementations import FourierFeatureEncoding
 
 epochs = 10
 num_inputs = 3 #x, y, t
@@ -110,10 +111,9 @@ spatial_sigma = 10.0
 temporal_sigma = 1.0'''
 
 layers = [num_inputs] + [308]*8 + [1]
-encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
+encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
-model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
-
+model = MLP(layers, nn.Tanh, hard_constraint_fn=hard_constraint, encoding=None)
 
 component_manager = ComponentManager()
 r = ResidualComponent(pde_fn, domainDataset)
