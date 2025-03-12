@@ -1,5 +1,3 @@
-#estoy bien
-#
 from pinns_v2.model import PINN, ModifiedMLP
 import torch
 import torch.nn as nn
