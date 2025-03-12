@@ -5,6 +5,7 @@ import math
 
 class DomainSupervisedDataset(Dataset):
     def __init__(self, path, n = None, batchsize = None, t_max = None):
+        self.name = "DomainSupervisedDataset"
         self.path = path
         self.t_max = t_max
         self.data = self.__exact(self.t_max)
@@ -31,9 +32,11 @@ class DomainSupervisedDataset(Dataset):
                 end = self.n - 1
             return self.data[start:end]
         
+    def get_params(self):
+        return {"n": self.n, "batchsize": self.batchsize, "t_max": self.t_max}
+        
     def __str__(self):
-        s = f"DomainSupervisedDataset(n={self.n}, batchsize={self.batchsize}, t_max={self.t_max})"
-        return s
+        return f"{self.name}: {self.get_params()}"
         
     def __exact(self, t_max = None):
         sol = []
@@ -54,6 +57,7 @@ class DomainSupervisedDataset(Dataset):
 
 class DomainDataset(Dataset):
     def __init__(self, xmin, xmax, n, batchsize = None, shuffle = True, period = 1, seed = 1234):
+        self.name = "DomainDataset"
         self.xmin = np.array(xmin, dtype="f")
         self.xmax = np.array(xmax, dtype="f")
         self.dim = len(xmin)
@@ -80,7 +84,9 @@ class DomainDataset(Dataset):
             s = self.rng2.uniform(low=self.xmin[i], high=np.nextafter(self.xmax[i], self.xmax[i]+1), size=(length, 1))
             if i == self.dim - 1:
                 #sort for ascending time
-                s.sort()
+                s = s.reshape(length, )
+                s = np.sort(s)
+                s = s.reshape(length, 1)
             x = np.hstack((x, s))
         return x
     
@@ -102,14 +108,17 @@ class DomainDataset(Dataset):
         self.counter += length 
         return x
     
+    def get_params(self):
+        return {"x_min": self.xmin, "x_max": self.xmax, "n": self.n, "batchsize": self.n_points_per_axis, "shuffle": self.shuffle, "period":self.period}
+    
     def __str__(self):
-        s = f"DomainDataset({self.xmin}, {self.xmax}, n={self.n}, shuffle={self.shuffle}, period={self.period})"
-        return s
+        return f"{self.name}: {self.get_params()}"
     
 
 class ICDataset(DomainDataset):
     def __init__(self, xmin, xmax, n, batchsize = None, shuffle = True, period = 1):
         super().__init__(xmin, xmax, n, batchsize = batchsize, shuffle = shuffle, period = period)
+        self.name = "ICDataset"
         
     def _sample_items(self, length):
 

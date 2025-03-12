@@ -62,7 +62,7 @@ def _jacobian(model, input, i=None, j=None):
 def _hessian(model, input, i = None, j = None):
     
     h = hessian(model)
-    hes = vmap(h, in_dims = (0, ))
+    hes = vmap(h, in_dims = (0, ), randomness="different")
     if i==None and j==None:
         return hes(input)[..., i, j]
     
