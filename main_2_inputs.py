@@ -2,6 +2,7 @@ from pinns_v2.model import MLP, ModifiedMLP
 from pinns_v2.implementations import *
 from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent
 from pinns_v2.rff import GaussianEncoding 
+from pinns_v2.rff import FourierFeatureEncoding1 
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -109,10 +110,20 @@ temporal_embedding_dim = 64
 spatial_sigma = 10.0
 temporal_sigma = 1.0'''
 
+
+
+
 layers = [num_inputs] + [308]*8 + [1]
-encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
+#encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
-model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
+encoding = FourierFeatureEncoding1(sigma = 1.0, input_size=num_inputs, encoded_size=154)
+
+if encoding:
+    layers = [encoding.output_size] + [308]*8 + [1]
+else:
+    layers = [num_inputs] + [308]*8 + [1]
+
+model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
 
 
 component_manager = ComponentManager()

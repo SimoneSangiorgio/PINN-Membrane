@@ -86,3 +86,35 @@ class GaussianEncoding(nn.Module):
             Tensor: Tensor mapping using random fourier features of shape :math:`(N, *, 2 \cdot \text{encoded_size})`
         """
         return gaussian_encoding(v, self.b)
+    
+
+def fourier_encoding(v: Tensor, B: Tensor) -> Tensor:
+    r"""Computes :math:`\gamma(\mathbf{v}) = (\cos{2 \pi \mathbf{B} \mathbf{v}} , \sin{2 \pi \mathbf{B} \mathbf{v}})`"""
+    gamma_v = 2 * torch.pi * torch.matmul(v, B.T) # B.T to ensure correct dimensions (N, encoded_size)
+    return torch.cat([torch.cos(gamma_v), torch.sin(gamma_v)], dim=-1)
+
+
+class FourierFeatureEncoding1(nn.Module):
+     """Layer for mapping coordinates using random Fourier features"""
+
+     def __init__(self, sigma: float, input_size: int, encoded_size: int):  # Required arguments, no optionals
+        super().__init__()
+        self.sigma = sigma
+        self.encoded_size = encoded_size
+        self.input_size = input_size
+
+        self.b = sample_b(self.sigma, (self.encoded_size, self.input_size))
+        self.enc = nn.Parameter(self.b)  # Use nn.Parameter for proper registration
+        self.output_size = self.encoded_size * 2
+
+     def setup(self, model):
+        """
+        Questo metodo viene chiamato per inizializzare l'encoding.
+        Puoi usarlo per registrare buffer o parametri aggiuntivi.
+        """
+        # Inserisci qui il codice di inizializzazione, se necessario
+        pass
+
+     def forward(self, v: Tensor) -> Tensor:
+        r"""Computes :math:`\gamma(\mathbf{v})`"""
+        return fourier_encoding(v, self.enc)
