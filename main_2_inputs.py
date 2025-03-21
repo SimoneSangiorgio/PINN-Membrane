@@ -10,8 +10,7 @@ from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
 from pinns_v2.implementations import FourierFeatureEncoding
-
-epochs = 10
+from pinns_v2.fourier_encoder import SpatioTemporalFFN
 num_inputs = 3 #x, y, t
 
 #spatial_dim = 2  # x, y
