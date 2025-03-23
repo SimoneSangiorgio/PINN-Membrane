@@ -1,7 +1,7 @@
 from pinns_v2.model import MLP, ModifiedMLP
 from pinns_v2.implementations import *
 from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent
-from pinns_v2.rff import GaussianEncoding 
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,7 +10,7 @@ from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
 from pinns_v2.implementations import FourierFeatureEncoding
-from pinns_v2.fourier_encoder import SpatioTemporalFFN
+from pinns_v2.fourier_encoder import SpatioTemporalFFN , SimpleSpatioTemporalFFN
 num_inputs = 3 #x, y, t
 
 #spatial_dim = 2  # x, y
@@ -44,10 +44,16 @@ params = {
 }
 
 def hard_constraint(input, output):
-    X = input[0]
-    Y = input[1]
-    tau = input[-1]
-    U = ((X-1)*X*(Y-1)*Y*t_f*tau)*(output+(u_min/delta_u)) - (u_min/delta_u)
+    # Input shape: [..., 3] (batch_dims..., x, y, t)
+    # Use feature indices instead of batch indices
+    X = input[..., 0] * delta_x + x_min  # x coordinate
+    Y = input[..., 1] * delta_y + y_min  # y coordinate
+    tau = input[..., 2]  # Normalized time [0,1]
+    
+    # Scale output using original constraint formula
+    U = ((X - x_max)*(X - x_min)*(Y - y_max)*(Y - y_min) * t_f * tau) * \
+        (output + (u_min/delta_u)) - (u_min/delta_u)
+        
     return U
 
 def f(sample):
@@ -112,7 +118,23 @@ temporal_sigma = 1.0'''
 layers = [num_inputs] + [308]*8 + [1]
 encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
-model = MLP(layers, nn.Tanh, hard_constraint_fn=hard_constraint, encoding=None)
+# model = SpatioTemporalFFN(
+#     spatial_dim=2,  # x,y
+#     temporal_dim=1,  # t
+#     spatial_sigmas=[1.0, 10.0],  # From paper section 4.3
+#     temporal_sigmas=[1.0],
+#     hidden_layers=[308]*8,  # Matches your existing architecture
+#     activation=nn.Tanh,
+#     hard_constraint_fn=hard_constraint
+# )
+model = SimpleSpatioTemporalFFN(
+    spatial_sigmas=[1.0, 10.0],  # From paper section 4.3
+    temporal_sigmas=[1.0],
+    hidden_layers=[308]*8,  # Matches your existing architecture
+    activation=nn.Tanh,
+    hard_constraint_fn=hard_constraint
+)
+#model = MLP(layers, nn.Tanh, hard_constraint_fn=hard_constraint, encoding=encoding)
 
 component_manager = ComponentManager()
 r = ResidualComponent(pde_fn, domainDataset)
@@ -133,7 +155,7 @@ model = model.apply(init_normal)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.15913059595003437)
 
-
+epochs = 100
 data = {
     "name": "membrane_3inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_optimized_modifiedMLP",
     "model": model,
@@ -149,4 +171,4 @@ train(data, output_to_file=False)
 
 
 # Salva i parametri del modello in un file
-torch.save(model.state_dict(), 'C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN Medical\\membrane_data\\model_{}_epochs.pth'.format(epochs))
+torch.save(model.state_dict(), 'modelli\\model_{}_epochs.pth'.format(epochs))

@@ -75,6 +75,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         orig_x = x
+    
         if self.encoding != None:
             x = self.encoding(x)
 
