@@ -143,7 +143,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_fn=ic_fn_vel,
     dataset=domainDataset,
     update_freq=1000,
-    ntk_batch_size=50
+    ntk_batch_size=16
 )
 component_manager.add_train_component(ntk_component)
 val_component = NTKAdaptiveWaveComponent(
@@ -151,7 +151,7 @@ val_component = NTKAdaptiveWaveComponent(
     ic_fn=ic_fn_vel,
     dataset=validationDataset,
     update_freq=1000,
-    ntk_batch_size=8
+    ntk_batch_size=16
 )
 component_manager.add_validation_component(val_component)
 
