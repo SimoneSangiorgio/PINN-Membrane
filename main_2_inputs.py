@@ -1,4 +1,4 @@
-from pinns_v2.model import MLP, ModifiedMLP
+from pinns_v2.model import MLP, ModifiedMLP, SimpleSpatioTemporalFFN
 from pinns_v2.implementations import *
 from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent
 from pinns_v2.rff import GaussianEncoding 
@@ -112,8 +112,14 @@ temporal_sigma = 1.0'''
 layers = [num_inputs] + [308]*8 + [1]
 encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
-model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
-
+# model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
+model = SimpleSpatioTemporalFFN(
+    spatial_sigmas=[1.0, 10.0],  # From paper section 4.3
+    temporal_sigmas=[1.0],
+    hidden_layers=[308]*8,  # Matches your existing architecture
+    activation=nn.Tanh,
+    hard_constraint_fn=hard_constraint
+)
 
 component_manager = ComponentManager()
 r = ResidualComponent(pde_fn, domainDataset)
