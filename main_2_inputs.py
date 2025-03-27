@@ -67,7 +67,8 @@ def f(sample):
 
 
 def pde_fn(model, sample):
-
+    print(f"\n[DEBUG PDE] Sample shape: {sample.shape}")  # <-- ADD THIS
+    print(f"[DEBUG PDE] Sample requires_grad: {sample.requires_grad}")  # <-- ADD THIS
     # Physics Parameters
     sigma = 1.0 #kg/m^2
     T = 25.0  #N/m
@@ -81,6 +82,10 @@ def pde_fn(model, sample):
     K = k*v #damping coefficient
 
     sample = sample.unsqueeze(0) if sample.dim() == 1 else sample
+        # Add this before J, d = _jacobian(...)
+    with torch.no_grad():
+        test_out = model(sample)
+        print(f"[DEBUG PDE] Model output shape: {test_out.shape}")  # <-- ADD THIS
     J, d = _jacobian(model, sample)
 
     ddX = _jacobian(d, sample, i=0, j=0)[0][0]
@@ -138,6 +143,7 @@ model = SimpleSpatioTemporalFFN(
 #model = MLP(layers, nn.Tanh, hard_constraint_fn=hard_constraint, encoding=encoding)
 
 component_manager = ComponentManager()
+<<<<<<< Updated upstream
 r = ResidualComponent(pde_fn, domainDataset)
 component_manager.add_train_component(r)
 ic = ICComponent([ic_fn_vel], icDataset)
@@ -146,6 +152,24 @@ r = ResidualComponent(pde_fn, validationDataset)
 component_manager.add_validation_component(r)
 ic = ICComponent([ic_fn_vel], validationicDataset)
 component_manager.add_validation_component(ic)
+=======
+ntk_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fn=ic_fn_vel,
+    dataset=domainDataset,
+    update_freq=1000,
+    ntk_batch_size=100
+)
+component_manager.add_train_component(ntk_component)
+val_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fn=ic_fn_vel,
+    dataset=validationDataset,
+    update_freq=1000,
+    ntk_batch_size=100
+)
+component_manager.add_validation_component(val_component)
+>>>>>>> Stashed changes
 
 
 def init_normal(m):

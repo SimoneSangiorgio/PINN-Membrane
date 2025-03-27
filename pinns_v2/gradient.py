@@ -33,16 +33,30 @@ def jacobian(output, input, i=None, j=None, create_graph=True):
         
 
 def _jacobian(model, input, i=None, j=None):
-    # dimension 0 is the batchsize, so we have to work with all the other dimensions rather
-    # than the first one
-    # If i == None and j == None, return the full jacobian
-    # If, instead i == None and j != None return the j-th colum of the jacobian
-    # If i != None and j == None return the i-th row of the jacobian
-    # Else return the element (i,j) of the jacobian
+    #############################################
+    # DEBUG PRINTS - COPY FROM HERE
+    #############################################
+    print("\n--- JACOBIAN DEBUG ---")
+    print(f"Input shape: {input.shape}")
+    print(f"Input dtype: {input.dtype}")
+    print(f"Input device: {input.device}")
+    print(f"Input requires_grad: {input.requires_grad}")
+    
+    # Test single sample forward pass
+    with torch.no_grad():
+        try:
+            test_input = input[0].unsqueeze(0) if input.dim() > 1 else input
+            test_output = model(test_input)
+            print(f"Single output shape: {test_output.shape}")
+        except Exception as e:
+            print(f"Forward pass test failed: {str(e)}")
+    #############################################
+    # DEBUG PRINTS - COPY UNTIL HERE
+    #############################################
+
+    # Rest of your original _jacobian code
     if i == None and j == None:
-        # compute the full gradient and output it
         jac_fn = jacrev(model)
-        #jac = vmap(jac_fn, in_dims = (0, ))
         return jac_fn(input), jac_fn
     elif j == None:
         output, vjp_fn = vjp(model, input)
@@ -57,7 +71,6 @@ def _jacobian(model, input, i=None, j=None):
             return d, None
         else:
             return d[...,i], None
-
 
 def _hessian(model, input, i = None, j = None):
     

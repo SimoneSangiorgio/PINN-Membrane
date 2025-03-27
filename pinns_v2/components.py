@@ -2,7 +2,7 @@ from pinns_v2.loss import ResidualLoss, TimeCausalityLoss, SupervisedDomainLoss,
 from pinns_v2.common import Component
 import torch
 from torch.func import vmap
-
+import numpy as np  
 class ComponentManager(Component):
     def __init__(self) -> None:
         self._component_list_train = []
@@ -157,32 +157,47 @@ class NTKAdaptiveWaveComponent(Component):
         self.ntk_batch_size = ntk_batch_size
 
     def compute_ntk_trace(self, model, loss_fn, inputs):
-        """Compute NTK trace using Hutchinson's estimator"""
+        print(f"\n[DEBUG NTK] Input shape: {inputs.shape}")  # <-- ADD THIS
+        print(f"[DEBUG NTK] Model parameters: {sum(p.numel() for p in model.parameters())}")  # <-- ADD THIS
+        
         params = list(model.parameters())
         idx = torch.randperm(inputs.shape[0])[:self.ntk_batch_size]
         inputs = inputs[idx]
-        def fn(sample):
-            loss = loss_fn(model, sample.unsqueeze(0))  # Process single sample
-            grads = torch.autograd.grad(loss, list(model.parameters()), create_graph=True)
-            return sum([torch.sum(g**2) for g in grads])
+        print(f"[DEBUG NTK] Using subset shape: {inputs.shape}")  # <-- ADD THIS
+        """Compute NTK trace using Hutchinson's estimator with memory optimization"""
+        params = list(model.parameters())
         
-        trace = vmap(fn)(inputs)
-        return torch.mean(trace)
+        # Use a small random subset for NTK computation
+        idx = torch.randperm(inputs.shape[0])[:self.ntk_batch_size]
+        inputs = inputs[idx].detach().requires_grad_(True)
+        
+        # Compute loss for the small batch
+        with torch.no_grad():  # Don't need gradients for the loss computation itself
+            loss = loss_fn(model, inputs)
+        
+        # Compute gradients per parameter to save memory
+        traces = []
+        for param in params:
+            grad = torch.autograd.grad(loss, param, create_graph=True, retain_graph=True)[0]
+            traces.append(torch.sum(grad**2))
+        
+        return torch.mean(torch.stack(traces))
 
     def update_weights(self, model, x_u, x_ut, x_r):
-        """Update weights based on NTK traces"""
+        """Update weights based on NTK traces with memory optimization"""
         with torch.enable_grad():
-            # Compute traces for each component
-            trace_u = self.compute_ntk_trace(model, self.ic_loss, x_u)
-            trace_ut = self.compute_ntk_trace(model, self.ic_velocity_loss, x_ut)
-            trace_r = self.compute_ntk_trace(model, self.pde_loss, x_r)
-            
-            total_trace = trace_u + trace_ut + trace_r
-            
-            # Update weights with stability epsilon
-            self.lambda_u = (total_trace / (trace_u + 1e-8)).detach()
-            self.lambda_ut = (total_trace / (trace_ut + 1e-8)).detach()
-            self.lambda_r = (total_trace / (trace_r + 1e-8)).detach()
+            # Compute traces in no_grad context to prevent memory buildup
+            with torch.no_grad():
+                trace_u = self.compute_ntk_trace(model, self.ic_loss, x_u)
+                trace_ut = self.compute_ntk_trace(model, self.ic_velocity_loss, x_ut)
+                trace_r = self.compute_ntk_trace(model, self.pde_loss, x_r)
+                
+                total_trace = trace_u + trace_ut + trace_r
+                
+                # Update weights with stability epsilon
+                self.lambda_u = (total_trace / (trace_u + 1e-8)).detach()
+                self.lambda_ut = (total_trace / (trace_ut + 1e-8)).detach()
+                self.lambda_r = (total_trace / (trace_r + 1e-8)).detach()
 
     def ic_loss(self, model, x):
         """Initial condition loss (NO requires_grad_() calls)"""
@@ -191,10 +206,19 @@ class NTKAdaptiveWaveComponent(Component):
         return torch.mean((u_pred - u_true)**2)
 
     def ic_velocity_loss(self, model, x):
-        """Initial velocity loss (NO requires_grad_() calls)"""
+        """Initial velocity loss with proper gradient tracking"""
+        x.requires_grad_(True)  # Ensure gradients are enabled
         u_pred = model(x)
-        dt = torch.autograd.grad(u_pred, x, torch.ones_like(u_pred),
-                               create_graph=True)[0][:, -1:]
+        
+        # Compute time derivative
+        dt = torch.autograd.grad(
+            outputs=u_pred,
+            inputs=x,
+            grad_outputs=torch.ones_like(u_pred),
+            create_graph=True,
+            retain_graph=True
+        )[0][:, -1:]  # Take the time derivative (last dimension)
+        
         return torch.mean(dt**2)
     
     def pde_loss(self, model, x):
@@ -205,27 +229,27 @@ class NTKAdaptiveWaveComponent(Component):
     def apply(self, model):
         # Get the next batch from the iterator
         x_in = next(self.iterator)
-        x_in = torch.tensor(x_in, dtype=torch.float32, requires_grad=True).to(self.device)
         
-        # IMPORTANT: Limit the NTK computation to a small batch.
-        # If the incoming batch is larger than self.ntk_batch_size, slice it.
-        if x_in.size(0) > self.ntk_batch_size:
-            x_in = x_in[:self.ntk_batch_size]
+        # Convert numpy array to torch tensor if needed and set requires_grad
+        if isinstance(x_in, np.ndarray):
+            x_in = torch.tensor(x_in, dtype=torch.float32, requires_grad=True)
+        else:
+            x_in = x_in.clone().detach().requires_grad_(True)
         
-        # Use the same (sliced) input for all computations
-        x_u = x_in  # For initial conditions
-        x_ut = x_in  # For velocity (if applicable)
-        x_r = x_in  # For the PDE residual
-
-        # Periodically update the NTK weights if needed
+        # Move to device
+        x_in = x_in.to(self.device)
+        
+        # For NTK computation - use a subset
+        ntk_batch = x_in[:self.ntk_batch_size]
+        
+        # Update weights if needed
         if self.step_count % self.update_freq == 0 and self.step_count > 0:
-            with torch.enable_grad():
-                self.update_weights(model, x_u, x_ut, x_r)
+            self.update_weights(model, ntk_batch, ntk_batch, ntk_batch)
         
-        # Compute losses based on the small NTK batch.
-        loss_u = self.ic_loss(model, x_u)
-        loss_ut = self.ic_velocity_loss(model, x_ut)
-        loss_r = self.pde_loss(model, x_r)
+        # Compute losses
+        loss_u = self.ic_loss(model, x_in)
+        loss_ut = self.ic_velocity_loss(model, x_in)
+        loss_r = self.pde_loss(model, x_in)
 
         total_loss = (
             self.lambda_u * loss_u +
