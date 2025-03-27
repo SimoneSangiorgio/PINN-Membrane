@@ -138,22 +138,14 @@ model = SimpleSpatioTemporalFFN(
 #model = MLP(layers, nn.Tanh, hard_constraint_fn=hard_constraint, encoding=encoding)
 
 component_manager = ComponentManager()
-ntk_component = NTKAdaptiveWaveComponent(
-    pde_fn=pde_fn,
-    ic_fn=ic_fn_vel,
-    dataset=domainDataset,
-    update_freq=1000,
-    ntk_batch_size=16
-)
-component_manager.add_train_component(ntk_component)
-val_component = NTKAdaptiveWaveComponent(
-    pde_fn=pde_fn,
-    ic_fn=ic_fn_vel,
-    dataset=validationDataset,
-    update_freq=1000,
-    ntk_batch_size=16
-)
-component_manager.add_validation_component(val_component)
+r = ResidualComponent(pde_fn, domainDataset)
+component_manager.add_train_component(r)
+ic = ICComponent([ic_fn_vel], icDataset)
+component_manager.add_train_component(ic)
+r = ResidualComponent(pde_fn, validationDataset)
+component_manager.add_validation_component(r)
+ic = ICComponent([ic_fn_vel], validationicDataset)
+component_manager.add_validation_component(ic)
 
 
 def init_normal(m):
