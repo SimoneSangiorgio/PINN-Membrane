@@ -122,14 +122,14 @@ model = SimpleSpatioTemporalFFN(
 )
 
 component_manager = ComponentManager()
-r = ResidualComponent(pde_fn, domainDataset)
-component_manager.add_train_component(r)
-ic = ICComponent([ic_fn_vel], icDataset)
-component_manager.add_train_component(ic)
-r = ResidualComponent(pde_fn, validationDataset)
-component_manager.add_validation_component(r)
-ic = ICComponent([ic_fn_vel], validationicDataset)
-component_manager.add_validation_component(ic)
+# r = ResidualComponent(pde_fn, domainDataset)
+# component_manager.add_train_component(r)
+# ic = ICComponent([ic_fn_vel], icDataset)
+# component_manager.add_train_component(ic)
+# r = ResidualComponent(pde_fn, validationDataset)
+# component_manager.add_validation_component(r)
+# ic = ICComponent([ic_fn_vel], validationicDataset)
+# component_manager.add_validation_component(ic)
 
 
 def init_normal(m):
