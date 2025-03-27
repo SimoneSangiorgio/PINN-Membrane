@@ -200,3 +200,58 @@ class ImprovedMLP(nn.Module):
             x = self.hard_constraint_fn(orig_x, x)
 
         return x					
+    
+
+class SimpleSpatioTemporalFFN(nn.Module):
+    def __init__(self, spatial_sigmas, temporal_sigmas, hidden_layers, activation, hard_constraint_fn=None):
+        """
+        Simplified version of paper's architecture (section 3.3)
+        - Input format: [..., 3] where last dim is (x, y, t)
+        - No special wrapper handling
+        - Clean separation of spatial/temporal processing
+        """
+        super().__init__()
+        self.spatial_dim = 2
+        self.temporal_dim = 1
+        
+        # Fourier feature matrices
+        self.spatial_B = [torch.randn(hidden_layers[0]//2, 2) * s for s in spatial_sigmas]
+        self.temporal_B = [torch.randn(hidden_layers[0]//2, 1) * s for s in temporal_sigmas]
+        self.hard_constraint_fn = hard_constraint_fn
+        # Shared MLP
+        self.mlp = nn.Sequential()
+        for i in range(len(hidden_layers)-1):
+            self.mlp.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
+            self.mlp.append(activation())
+            
+        # Final layer
+        self.final = nn.Linear(
+            len(spatial_sigmas)*len(temporal_sigmas)*hidden_layers[-1], 
+            1
+        )
+
+    def forward(self, x):
+        # Split input (last dimension must be 3)
+        x_spatial = x[..., :2]  # x, y
+        x_time = x[..., 2:]     # t
+        
+        # Process spatial features
+        spatial_feats = []
+        for B in self.spatial_B:
+            proj = 2*math.pi * x_spatial @ B.T
+            encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+            spatial_feats.append(self.mlp(encoded))
+            
+        # Process temporal features
+        temporal_feats = []
+        for B in self.temporal_B:
+            proj = 2*math.pi * x_time @ B.T
+            encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+            temporal_feats.append(self.mlp(encoded))
+            
+        # Combine features
+        combined = [s*t for s in spatial_feats for t in temporal_feats]
+        out = self.final(torch.cat(combined, dim=-1))
+        if self.hard_constraint_fn:
+            out = self.hard_constraint_fn(x, out)
+        return out
