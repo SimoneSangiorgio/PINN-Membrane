@@ -1,6 +1,6 @@
 from pinns_v2.model import MLP, ModifiedMLP, SimpleSpatioTemporalFFN
 from pinns_v2.implementations import *
-from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent
+from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent, NTKAdaptiveWaveComponent
 from pinns_v2.rff import GaussianEncoding 
 import torch
 import torch.nn as nn
@@ -90,7 +90,11 @@ def ic_fn_vel(model, sample):
     dt = dtau*delta_u/t_f
     ics = torch.zeros_like(dt)
     return dt, ics
-
+def ic_fn_u(model, sample):
+    """Initial position: u(0,x,y) = 0"""
+    u_pred = model(sample)
+    u_true = torch.zeros_like(u_pred)
+    return u_pred, u_true
 batchsize = 500
 learning_rate = 0.002203836177626117
 
@@ -131,6 +135,23 @@ component_manager = ComponentManager()
 # ic = ICComponent([ic_fn_vel], validationicDataset)
 # component_manager.add_validation_component(ic)
 
+# Replace commented ICComponent with:
+ntk_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
+    dataset=domainDataset,
+    ic_dataset=icDataset,
+    update_freq=2
+)
+component_manager.add_train_component(ntk_component)
+val_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
+    dataset=validationDataset,
+    ic_dataset=validationicDataset,
+    update_freq=0
+)
+component_manager.add_validation_component(val_component)
 
 def init_normal(m):
     if type(m) == torch.nn.Linear:
