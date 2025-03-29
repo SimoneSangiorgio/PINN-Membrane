@@ -177,11 +177,12 @@ class NTKAdaptiveWaveComponent(Component):
     def update_weights(self, model):
         """Update λ weights using NTK traces (Algorithm 1 in paper)"""
         with torch.enable_grad():
+            print("Updating weights")
             trace_u = self.compute_ntk_trace(model, self.ic_u_loss, 'ic')
             trace_ut = self.compute_ntk_trace(model, self.ic_ut_loss, 'ic')
             trace_r = self.compute_ntk_trace(model, self.pde_loss, 'residual')
             
-            total_trace = trace_u + trace_ut + trace_r
+            total_trace =  trace_ut + trace_r + trace_u
             
             # Stabilize division
             self.lambda_u = (total_trace / (trace_u + 1e-8)).detach()
@@ -194,19 +195,25 @@ class NTKAdaptiveWaveComponent(Component):
         x_ic = torch.Tensor(next(self.ic_iterator)).to(self.device)
 
         # Update weights periodically
-        if self.update_freq > 0 and self.step_count % self.update_freq == 0:
+        if self.update_freq > 0 and self.step_count > 0 and self.step_count % self.update_freq == 0:
             self.update_weights(model)
 
         # Compute all three losses
         loss_u = self.ic_u_loss.compute_loss(model, x_ic)  # Position
+        print("loss_u", loss_u)
         loss_ut = self.ic_ut_loss.compute_loss(model, x_ic)  # Velocity
+        print("loss_ut", loss_ut)
         loss_r = self.pde_loss.compute_loss(model, x_res)    # Residual
+        print("loss_r", loss_r)
         
+        print("lambda_u", self.lambda_u)
+        print("lambda_ut", self.lambda_ut) 
+        print("lambda_r", self.lambda_r)
         # Weighted total loss (Eq. 6.2 in paper)
         total_loss = (
-            self.lambda_u * loss_u +
-            self.lambda_ut * loss_ut +
-            self.lambda_r * loss_r
+            self.lambda_u.detach() * loss_u +
+            self.lambda_ut.detach() * loss_ut +
+            self.lambda_r.detach() * loss_r
         )
         
         self.step_count += 1
