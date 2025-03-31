@@ -163,16 +163,14 @@ class NTKAdaptiveWaveComponent(Component):
 
     def compute_ntk_trace(self, model, loss_fn, dataset_type='residual'):
         """Compute NTK trace for a specific loss component"""
-        try:
-            x_in = next(self.residual_iterator if dataset_type == 'residual' else self.ic_iterator)
-        except StopIteration:
-            # Reset iterator
-            self.residual_iterator = iter(self.dataset) if dataset_type == 'residual' else iter(self.ic_dataset)
-            x_in = next(self.residual_iterator)
+        
+        x_in = next(self.residual_iterator if dataset_type == 'residual' else self.ic_iterator)
+        
         x_in = torch.tensor(x_in, device=self.device, dtype=torch.float32).requires_grad_(True)
         loss = loss_fn.compute_loss(model, x_in)
-        grads = torch.autograd.grad(loss, model.parameters(), create_graph=True)
-        return sum(torch.sum(g**2) for g in grads)
+        grads = torch.autograd.grad(loss, model.parameters(), allow_unused=True)
+        trace = sum(torch.sum(g**2) for g in grads if g is not None)
+        return trace
 
     def update_weights(self, model):
         """Update λ weights using NTK traces (Algorithm 1 in paper)"""

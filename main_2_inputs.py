@@ -57,6 +57,20 @@ def hard_constraint(x_in, y_out):
 
     U = (u-u_min)/delta_u
     return U
+def hard_constraint2(x_in, y_out):
+    X = x_in[0]
+    Y = x_in[1]
+    tau = x_in[-1]
+
+    x = X*delta_x + x_min
+    y = Y*delta_y + y_min
+    t = tau*t_f
+    u = y_out*delta_u + u_min
+
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)
+
+    U = (u-u_min)/delta_u
+    return U
 def f(sample):
     x = sample[0]*(delta_x) + x_min
     y = sample[1]*(delta_y) + y_min
@@ -100,7 +114,7 @@ def ic_fn_vel(model, sample):
 def ic_fn_u(model, sample):
     """Initial position: u(0,x,y) = 0"""
     u_pred = model(sample)
-    u_true = torch.zeros_like(u_pred)
+    u_true = torch.ones_like(u_pred)*(-u_min)/delta_u
     return u_pred, u_true
 batchsize = 500
 learning_rate = 0.002203836177626117
@@ -129,7 +143,7 @@ model = SimpleSpatioTemporalFFN(
     temporal_sigmas=[1.0,10.0],
     hidden_layers=[200]*3, 
     activation=nn.Tanh,
-    hard_constraint_fn=hard_constraint
+    hard_constraint_fn=hard_constraint2
 )
 
 component_manager = ComponentManager()
@@ -153,7 +167,7 @@ ntk_component = NTKAdaptiveWaveComponent(
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent(pde_fn, validationDataset)
 component_manager.add_validation_component(r)
-ic = ICComponent([ic_fn_vel], validationicDataset)
+ic = ICComponent([ic_fn_u,ic_fn_vel], validationicDataset)
 component_manager.add_validation_component(ic)
 
 def init_normal(m):
