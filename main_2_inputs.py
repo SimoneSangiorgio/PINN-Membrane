@@ -57,6 +57,7 @@ def hard_constraint(x_in, y_out):
 
     U = (u-u_min)/delta_u
     return U
+    
 def hard_constraint2(x_in, y_out):
     X = x_in[0]
     Y = x_in[1]
@@ -71,14 +72,16 @@ def hard_constraint2(x_in, y_out):
 
     U = (u-u_min)/delta_u
     return U
+    
 def f(sample):
     x = sample[0]*(delta_x) + x_min
     y = sample[1]*(delta_y) + y_min
-
-    h = f_min
+    t = sample[2] * t_f
     
-    z = h * torch.exp(-100*((x-delta_x/2)**2+(y-delta_y/2)**2))
-    return z
+    spatial_term = torch.exp(-100*((x-delta_x/2)**2+(y-delta_y/2)**2))
+    temporal_term = torch.exp(-t / 0.3)
+
+    return f_min*spatial_term*temporal_term
 
 
 def pde_fn(model, sample):
@@ -87,7 +90,7 @@ def pde_fn(model, sample):
     sigma = 1.0 #kg/m^2
     T = 25.0  #N/m
     v = (T / sigma)**0.5 
-    k = 1 #damping term (viscosity)
+    k = 0.4 #damping term (viscosity)
 
     a = (v**2)*(t_f**2)/(delta_x**2)
     b = (v**2)*(t_f**2)/(delta_y**2)
