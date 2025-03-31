@@ -1,6 +1,6 @@
 from pinns_v2.model import MLP, ModifiedMLP, SimpleSpatioTemporalFFN
 from pinns_v2.implementations import *
-from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent
+from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, SupervisedComponent, NTKAdaptiveWaveComponent
 from pinns_v2.rff import GaussianEncoding 
 import torch
 import torch.nn as nn
@@ -10,7 +10,7 @@ from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
 
-epochs = 10
+epochs = 1000
 num_inputs = 3 #x, y, t
 
 #spatial_dim = 2  # x, y
@@ -18,7 +18,7 @@ num_inputs = 3 #x, y, t
 
 
 u_min = -0.21
-u_max = 0.0
+u_max = 0.21
 x_min = 0.0
 x_max = 1.0
 y_min = 0.0
@@ -43,13 +43,34 @@ params = {
     "f_max": f_max
 }
 
-def hard_constraint(input, output):
-    X = input[0]
-    Y = input[1]
-    tau = input[-1]
-    U = ((X-1)*X*(Y-1)*Y*t_f*tau)*(output+(u_min/delta_u)) - (u_min/delta_u)
-    return U
+def hard_constraint(x_in, y_out):
+    X = x_in[0]
+    Y = x_in[1]
+    tau = x_in[-1]
 
+    x = X*delta_x + x_min
+    y = Y*delta_y + y_min
+    t = tau*t_f
+    u = y_out*delta_u + u_min
+
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)*t
+
+    U = (u-u_min)/delta_u
+    return U
+def hard_constraint2(x_in, y_out):
+    X = x_in[0]
+    Y = x_in[1]
+    tau = x_in[-1]
+
+    x = X*delta_x + x_min
+    y = Y*delta_y + y_min
+    t = tau*t_f
+    u = y_out*delta_u + u_min
+
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)
+
+    U = (u-u_min)/delta_u
+    return U
 def f(sample):
     x = sample[0]*(delta_x) + x_min
     y = sample[1]*(delta_y) + y_min
@@ -90,7 +111,11 @@ def ic_fn_vel(model, sample):
     dt = dtau*delta_u/t_f
     ics = torch.zeros_like(dt)
     return dt, ics
-
+def ic_fn_u(model, sample):
+    """Initial position: u(0,x,y) = 0"""
+    u_pred = model(sample)
+    u_true = torch.ones_like(u_pred)*(-u_min)/delta_u
+    return u_pred, u_true
 batchsize = 500
 learning_rate = 0.002203836177626117
 
@@ -114,23 +139,36 @@ encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
 # model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
 model = SimpleSpatioTemporalFFN(
-    spatial_sigmas=[1.0, 10.0],  # From paper section 4.3
-    temporal_sigmas=[1.0],
-    hidden_layers=[308]*8,  # Matches your existing architecture
+    spatial_sigmas=[1.0],  # From paper section 4.3
+    temporal_sigmas=[1.0,10.0],
+    hidden_layers=[200]*3, 
     activation=nn.Tanh,
-    hard_constraint_fn=hard_constraint
+    hard_constraint_fn=hard_constraint2
 )
 
 component_manager = ComponentManager()
-r = ResidualComponent(pde_fn, domainDataset)
-component_manager.add_train_component(r)
-ic = ICComponent([ic_fn_vel], icDataset)
-component_manager.add_train_component(ic)
+# r = ResidualComponent(pde_fn, domainDataset)
+# component_manager.add_train_component(r)
+# ic = ICComponent([ic_fn_vel], icDataset)
+# component_manager.add_train_component(ic)
+# r = ResidualComponent(pde_fn, validationDataset)
+# component_manager.add_validation_component(r)
+# ic = ICComponent([ic_fn_vel], validationicDataset)
+# component_manager.add_validation_component(ic)
+
+# Replace commented ICComponent with:
+ntk_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
+    dataset=domainDataset,
+    ic_dataset=icDataset,
+    update_freq=0
+)
+component_manager.add_train_component(ntk_component)
 r = ResidualComponent(pde_fn, validationDataset)
 component_manager.add_validation_component(r)
-ic = ICComponent([ic_fn_vel], validationicDataset)
+ic = ICComponent([ic_fn_u,ic_fn_vel], validationicDataset)
 component_manager.add_validation_component(ic)
-
 
 def init_normal(m):
     if type(m) == torch.nn.Linear:
@@ -156,4 +194,4 @@ train(data, output_to_file=False)
 
 
 # Salva i parametri del modello in un file
-torch.save(model.state_dict(), 'C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN Medical\\membrane_data\\model_{}_epochs.pth'.format(epochs))
+torch.save(model.state_dict(), 'result\\model_{}_epochs.pth'.format(epochs))

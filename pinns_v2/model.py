@@ -254,4 +254,5 @@ class SimpleSpatioTemporalFFN(nn.Module):
         out = self.final(torch.cat(combined, dim=-1))
         if self.hard_constraint_fn:
             out = self.hard_constraint_fn(x, out)
+       
         return out
