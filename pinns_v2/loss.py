@@ -21,7 +21,7 @@ class ResidualLoss(LossComponent):
 
     def _compute_loss_r(self, model, pde_fn, x_in):
         r_pred = vmap(partial(self._residual_loss, model, pde_fn), (0), randomness="different")(x_in)
-        pde_loss = torch.mean(r_pred)   # somma invece di mean
+        pde_loss = torch.mean(r_pred)  
         return pde_loss
 
     def compute_loss(self, model, x_in):

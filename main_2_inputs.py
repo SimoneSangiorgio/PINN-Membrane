@@ -190,7 +190,7 @@ data = {
     "additional_data": params
 }
 
-train(data, output_to_file=False)
+train(data, output_to_file=True)
 
 
 # Salva i parametri del modello in un file
