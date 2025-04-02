@@ -9,8 +9,8 @@ import numpy as np
 from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
-
-epochs = 1000
+import torch.optim.lr_scheduler as lr_scheduler
+epochs = 40000
 num_inputs = 3 #x, y, t
 
 #spatial_dim = 2  # x, y
@@ -118,16 +118,17 @@ def ic_fn_u(model, sample):
     return u_pred, u_true
 batchsize = 500
 learning_rate = 0.002203836177626117
+batchsize_sgd = 360 # Paper uses 360 for wave equation
 
 print("Building Domain Dataset")
-domainDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, 10000, period = 3)
+domainDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, 10000,batchsize=batchsize_sgd, period = 3)
 print("Building IC Dataset")
-icDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 10000, period = 3)
+icDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 10000,batchsize=batchsize_sgd, period = 3)
 
 print("Building Validation Dataset")
-validationDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, batchsize, shuffle = False)
+validationDataset = DomainDataset([0.0]*num_inputs,[1.0]*num_inputs, batchsize_sgd, shuffle = False)
 print("Building Validation IC Dataset")
-validationicDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), batchsize, shuffle = False)
+validationicDataset = ICDataset([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), batchsize_sgd, shuffle = False)
 
 '''spatial_embedding_dim = 64
 temporal_embedding_dim = 64
@@ -162,7 +163,9 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
     dataset=domainDataset,
     ic_dataset=icDataset,
-    update_freq=0
+    update_freq=1000,
+    min_lambda=0.1,
+    max_lambda=1000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent(pde_fn, validationDataset)
@@ -175,8 +178,27 @@ def init_normal(m):
         torch.nn.init.xavier_uniform_(m.weight)
 
 model = model.apply(init_normal)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.15913059595003437)
+initial_lr = 1e-3
+optimizer = optim.Adam(model.parameters(), lr=initial_lr)
+# optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+# scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.15913059595003437)
+# Scheduler (Exponential Decay from paper)
+# decay_rate = 0.9, decay_steps = 1000
+# gamma ^ (step / decay_steps) -> gamma = decay_rate
+scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9**(1/1000))
+# Note: This applies decay *every step*. The paper says "every 1000 iterations".
+# A LambdaLR or manual adjustment might be closer, but ExponentialLR is standard.
+# Let's try a StepLR version that matches "every 1000 steps":
+# scheduler = lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
+
+# --- Training Data Dictionary ---
+# Total iterations = epochs * steps_per_epoch
+# Paper used 40,000 iterations total.
+# Calculate epochs needed:
+steps_per_epoch = len(domainDataset) # Batches in residual dataset
+total_iterations = 40000
+epochs = int(np.ceil(total_iterations / steps_per_epoch))
+print(f"Target iterations: {total_iterations}. Steps per epoch: {steps_per_epoch}. Required epochs: {epochs}")
 
 
 data = {

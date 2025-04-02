@@ -105,7 +105,7 @@ def train(data, output_to_file = True):
         
         test_loss.append(np.average(validation_losses))
                 
-        if output_to_file and epoch % 200 == 0:
+        if output_to_file and epoch % 100 == 0:
             epoch_path = os.path.join(model_dir, f"model_{epoch}.pt")
             torch.save(model, epoch_path)
         
