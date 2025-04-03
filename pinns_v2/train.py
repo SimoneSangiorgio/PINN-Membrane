@@ -15,7 +15,7 @@ test_loss = []
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train(data, output_to_file = True):  
+def train(data, output_to_file = True, print_epoch = 10):  
     name = data.get("name", "main")
     model = data.get("model")
     epochs = data.get("epochs")
@@ -77,16 +77,17 @@ def train(data, output_to_file = True):
 
             train_losses.append(l.item())
 
-            if i % 10 ==0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.10f}'.format(
-                    epoch, i, component_manager.number_of_iterations(train = True),
-                    100. * i / component_manager.number_of_iterations(train = True), l.item()))
+        
                 
                 # Save to log file
                 #log_file.write('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.10f}\n'.format(
                 #    epoch, batch_idx, int(len(dataloader.dataset)/batchsize),
                 #    100. * batch_idx / len(dataloader), loss.item()))
-        
+        if epoch % print_epoch ==0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.10f}'.format(
+                epoch, (i+1), component_manager.number_of_iterations(train = True),
+                100. * (i+1) / component_manager.number_of_iterations(train = True), l.item()))
+
         train_loss.append(np.average(train_losses))
 
         model.eval()
@@ -98,14 +99,14 @@ def train(data, output_to_file = True):
             del l
             gc.collect()
             
-            if i % 10 == 0:
-                print('Validation Epoch: {} \tLoss: {:.10f}'.format(
-                    epoch, np.average(validation_losses)))
+        if epoch % print_epoch ==0:
+            print('Validation Epoch: {} \tLoss: {:.10f}'.format(
+                epoch, np.average(validation_losses)))
             
         
         test_loss.append(np.average(validation_losses))
                 
-        if output_to_file and epoch % 20 == 0:
+        if output_to_file and epoch % 100 == 0:
             epoch_path = os.path.join(model_dir, f"model_{epoch}.pt")
             torch.save(model, epoch_path)
         
@@ -132,12 +133,20 @@ def train(data, output_to_file = True):
         plt.savefig(f'{output_dir}/train_and_test_loss.png')
         plt.clf()
         label = ["Residual loss", "IC loss"]
-        residual_losses = component_manager.search("Residual", train = False).loss.history
-        ic_losses = component_manager.search("IC", train = False).loss
-        plt.plot(residual_losses)
+        residual_losses = component_manager.search("Residual", train = False)
+        for i in range(len(residual_losses)):
+            j = 0
+            for single_loss in residual_losses[i].loss:
+                plt.plot(single_loss.history)
+                label.append("Residual_loss_"+str(i)+"_"+str(j))
+                j += 1
+        ic_losses = component_manager.search("IC", train = False)
         for i in range(len(ic_losses)):
-            plt.plot(ic_losses[i].history)
-            label.append("IC_loss_"+str(i))
+            j = 0
+            for single_loss in ic_losses[i].loss:
+                plt.plot(single_loss.history)
+                label.append("IC_loss_"+str(i)+"_"+str(j))
+                j += 1
         plt.legend(label)
         plt.xlabel('Iterations')
         plt.ylabel('Loss')

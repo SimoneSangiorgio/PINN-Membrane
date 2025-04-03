@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import numpy as np
+from pinns_v2.rff import GaussianEncoding
 from collections import OrderedDict
 import math
 
@@ -19,7 +21,9 @@ class ModifiedMLP(nn.Module):
 
         layer_list = nn.ModuleList()        
         for i in range(0, len(self.layers)-2):
-            layer_list.append(nn.Linear(layers[i], layers[i+1]))
+            layer_list.append(
+                nn.Linear(layers[i], layers[i+1])
+            )
             layer_list.append(self.activation())
             layer_list.append(Transformer())
             layer_list.append(nn.Dropout(p = p_dropout))
@@ -84,6 +88,87 @@ class MLP(nn.Module):
             output = self.hard_constraint_fn(orig_x, output)
 
         return output
+    
+
+class TimeFourierMLP(nn.Module):
+    def __init__(self, layers, activation_function, sigma, encoded_size, hard_constraint_fn=None, p_dropout=0.2) -> None:
+        super(TimeFourierMLP, self).__init__()
+
+        orig_initial_layer = layers[0]
+        self.layers = layers
+        self.activation = activation_function
+        self.encoding = GaussianEncoding(sigma = sigma, input_size=1, encoded_size=encoded_size)
+        self.encoding.setup(self)
+        # restore layer size for the first layer of the MLP
+        # the first layer size should be the encoding of t (with encoded_size*2 size)
+        # and the other components of the input not encoded
+        self.layers[0] = encoded_size*2 + orig_initial_layer - 1 
+
+        layer_list = list()        
+        for i in range(len(self.layers)-2):
+            layer_list.append(
+                ('layer_%d' % i, nn.Linear(self.layers[i], self.layers[i+1]))
+            )
+            layer_list.append(('activation_%d' % i, self.activation()))
+            layer_list.append(('dropout_%d' % i, nn.Dropout(p = p_dropout)))
+        layer_list.append(('layer_%d' % (len(self.layers)-1), nn.Linear(self.layers[-2], self.layers[-1])))
+
+        self.mlp = nn.Sequential(OrderedDict(layer_list))
+
+        self.hard_constraint_fn = hard_constraint_fn
+
+    def forward(self, x):
+        orig_x = x
+        x = self.encoding(x[-1:]) # just encode time component
+        x = torch.cat((orig_x[:-1], x), dim=0) # concatenate with the other components of the input
+        output = self.mlp(x)
+
+        if self.hard_constraint_fn != None:
+            output = self.hard_constraint_fn(orig_x, output)
+
+        return output
+
+
+
+
+class NormalizedMLP(nn.Module):
+    def __init__(self, layers, activation_function, range_input, hard_constraint_fn=None, p_dropout=0.2, encoding=None) -> None:
+        super(NormalizedMLP, self).__init__()
+
+        self.norm = Normalization_strat(range_input.clone().detach()) 
+        self.layers = layers
+        self.activation = activation_function
+        self.encoding = encoding
+        if encoding != None:
+            encoding.setup(self)
+
+        layer_list = list()        
+        for i in range(len(self.layers)-2):
+            layer_list.append(
+                ('layer_%d' % i, nn.Linear(layers[i], layers[i+1]))
+            )
+            layer_list.append(('activation_%d' % i, self.activation()))
+            layer_list.append(('dropout_%d' % i, nn.Dropout(p = p_dropout)))
+        layer_list.append(('layer_%d' % (len(self.layers)-1), nn.Linear(self.layers[-2], self.layers[-1])))
+
+        self.mlp = nn.Sequential(OrderedDict(layer_list))
+
+        self.hard_constraint_fn = hard_constraint_fn
+
+    def forward(self, x):
+        orig_x = x
+        x = self.norm(x)
+        if self.encoding != None:
+            x = self.encoding(x)
+
+        output = self.mlp(x)
+
+        if self.hard_constraint_fn != None:
+            output = self.hard_constraint_fn(orig_x, output)
+
+        return output
+
+
 
 
 class Sin(nn.Module):
@@ -141,118 +226,11 @@ class FactorizedModifiedLinear(FactorizedLinear):
     def forward(self, x, U , V):
         return torch.nn.functional.linear(torch.multiply(x, U) + torch.multiply((1-x), V), self.s*self.v, self.bias)
 
-
-class ImprovedMLP(nn.Module):
-    def __init__(self, layers, activation_function, hard_constraint_fn=None, p_dropout=0.2, encoding=None):
-        super(ImprovedMLP, self).__init__()
-        
-        self.layers = layers
-        self.activation = activation_function
-        self.hard_constraint_fn = hard_constraint_fn
-
-        self.encoding = encoding
-        if encoding:
-            encoding.setup(self)
-
-        '''U = φ(XW_1 + b_1)'''
-        self.U = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
-        '''V = φ(XW_2 + b_2)'''
-        self.V = torch.nn.Sequential(nn.Linear(self.layers[0], self.layers[1]), self.activation())
-
-        # Livelli nascosti con connessioni residue
-        self.hidden_layers = nn.ModuleList()
-        for i in range(0, len(layers) - 2):
-            '''Z_k = φ(H_k W_{z,k} + b_{z,k}) ∀ k = 1,...,L'''
-            self.hidden_layers.append(nn.Linear(layers[i], layers[i+1]))
-            self.hidden_layers.append(self.activation())
-            #self.hidden_layers.append(Transformer())
-            self.hidden_layers.append(nn.Dropout(p=p_dropout))
-
-        '''f_θ(x) = H^(L+1)W + b'''
-        self.output_layer = nn.Linear(layers[-2], layers[-1])
+class Normalization_strat(nn.Module):
+    def __init__(self, tensor_range):
+        super(Normalization_strat, self).__init__()
+        self.tensor_range = tensor_range
 
     def forward(self, x):
-        orig_x = x
-
-        if self.encoding:
-            x = self.encoding(x)
-
-        # Genera trasformazioni U e V
-        U = self.U(orig_x)
-        V = self.V(orig_x)
-
-        # Propagazione nei livelli nascosti con connessioni residue
-        for i in range(0, len(self.hidden_layers), 4):  # 4: Linear -> Activation -> Transformer -> Dropout
-            '''Z_k = φ(H_k W_{z,k} + b_{z,k})    ∀ k = 1,...,L'''
-            Z = self.hidden_layers[i](x) #Linear
-            Z = self.hidden_layers[i + 1](Z)  # Activation
-            #Z = self.hidden_layers[i + 2](Z, U, V) #Transformer
-            Z = self.hidden_layers[i + 2](Z)  # Dropout
-
-            '''H_{k+1} = (1 - Z_k) ⊙ U + Z_k ⊙ V    ∀ k = 1,...,L'''
-            x = (1 - Z) * U + Z * V
-
-        # Propagazione finale
-        '''f_θ(x) = H^(L+1)W + b'''
-        x = self.output_layer(x)
-
-        if self.hard_constraint_fn:
-            x = self.hard_constraint_fn(orig_x, x)
-
-        return x					
-    
-
-class SimpleSpatioTemporalFFN(nn.Module):
-    def __init__(self, spatial_sigmas, temporal_sigmas, hidden_layers, activation, hard_constraint_fn=None):
-        """
-        Simplified version of paper's architecture (section 3.3)
-        - Input format: [..., 3] where last dim is (x, y, t)
-        - No special wrapper handling
-        - Clean separation of spatial/temporal processing
-        """
-        super().__init__()
-        self.spatial_dim = 2
-        self.temporal_dim = 1
-        
-        # Fourier feature matrices
-        self.spatial_B = [torch.randn(hidden_layers[0]//2, 2) * s for s in spatial_sigmas]
-        self.temporal_B = [torch.randn(hidden_layers[0]//2, 1) * s for s in temporal_sigmas]
-        self.hard_constraint_fn = hard_constraint_fn
-        # Shared MLP
-        self.mlp = nn.Sequential()
-        for i in range(len(hidden_layers)-1):
-            self.mlp.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
-            self.mlp.append(activation())
-            
-        # Final layer
-        self.final = nn.Linear(
-            len(spatial_sigmas)*len(temporal_sigmas)*hidden_layers[-1], 
-            1
-        )
-
-    def forward(self, x):
-        # Split input (last dimension must be 3)
-        x_spatial = x[..., :2]  # x, y
-        x_time = x[..., 2:]     # t
-        
-        # Process spatial features
-        spatial_feats = []
-        for B in self.spatial_B:
-            proj = 2*math.pi * x_spatial @ B.T
-            encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
-            spatial_feats.append(self.mlp(encoded))
-            
-        # Process temporal features
-        temporal_feats = []
-        for B in self.temporal_B:
-            proj = 2*math.pi * x_time @ B.T
-            encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
-            temporal_feats.append(self.mlp(encoded))
-            
-        # Combine features
-        combined = [s*t for s in spatial_feats for t in temporal_feats]
-        out = self.final(torch.cat(combined, dim=-1))
-        if self.hard_constraint_fn:
-            out = self.hard_constraint_fn(x, out)
-       
-        return out
+        return (x/(self.tensor_range+1e-5))    # element-wise division at each index by tensor_range, for every element of x (a small number 0.00001 is added to handle 0 denominator cases)
+					

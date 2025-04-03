@@ -16,12 +16,12 @@ class ResidualLoss(LossComponent):
     
     def _residual_loss(self, model, pde_fn, x_in):
         r = pde_fn(model, x_in)
-        pde_loss = (r**2)
+        pde_loss = r**2
         return pde_loss
 
     def _compute_loss_r(self, model, pde_fn, x_in):
         r_pred = vmap(partial(self._residual_loss, model, pde_fn), (0), randomness="different")(x_in)
-        pde_loss = torch.mean(r_pred)   # somma invece di mean
+        pde_loss = torch.mean(r_pred)
         return pde_loss
 
     def compute_loss(self, model, x_in):
@@ -37,7 +37,7 @@ class ICLoss(LossComponent):
     
     def _ic_loss(self, model, ic_fn, x_in):
         u, true = ic_fn(model, x_in)
-        loss_ic = ((u.flatten() - true.flatten())**2)
+        loss_ic = torch.mean((u.flatten() - true.flatten())**2)
         return loss_ic
 
     def _compute_loss_ic(self, model, ic_fn, x_in):
@@ -63,7 +63,7 @@ class TimeCausalityLoss(LossComponent):
     
     def _residual_loss(self, model, pde_fn, x_in):
         r = pde_fn(model, x_in)
-        pde_loss = torch.mean(r**2)
+        pde_loss = r**2
         return pde_loss
 
     def _compute_loss_r_time_causality(self, model, pde_fn, bucket_size, eps_time, x_in):
