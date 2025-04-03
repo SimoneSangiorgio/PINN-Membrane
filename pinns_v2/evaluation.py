@@ -55,7 +55,7 @@ def hard_constraint2(x_in, y_out):
 # --- Modello ---
 model = SimpleSpatioTemporalFFN(
     spatial_sigmas=[1.0], temporal_sigmas=[1.0, 10.0],
-    hidden_layers=[200] * 3, activation=nn.Tanh, hard_constraint_fn=hard_constraint2
+    hidden_layers=[200] * 3, activation=nn.Tanh, hard_constraint_fn=None
 )
 
 # --- Caricamento Pesi ---
