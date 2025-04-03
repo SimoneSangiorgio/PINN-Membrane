@@ -5,14 +5,8 @@ import scipy.io as sio
 import os
 import json
 import math
+from pinns_v2.model import SimpleSpatioTemporalFFN
 
-# Try importing the real model class
-try:
-    from pinns_v2.model import SimpleSpatioTemporalFFN
-except ImportError:
-    print("Error: Could not import SimpleSpatioTemporalFFN from pinns_v2.model.")
-    print("Please ensure 'pinns_v2' package is installed or accessible.")
-    exit()
 
 # --- !!! DUMMY FUNCTION FOR LOADING ONLY !!! ---
 # This function MUST exist with the exact name 'hard_constraint2' before torch.load
