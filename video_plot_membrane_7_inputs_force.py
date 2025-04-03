@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_6000.pt')
+model_path = os.path.join(model_dir, 'model_MLP.pt')
 
 video_output = False
 
