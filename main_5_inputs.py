@@ -1,5 +1,5 @@
-from pinns_v2.model import MLP, ModifiedMLP, TimeFourierMLP
-from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, ResidualTimeCausalityComponent
+from pinns_v2.model import MLP, ModifiedMLP, TimeFourierMLP, SimpleSpatioTemporalFFN
+from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, ResidualTimeCausalityComponent, NTKAdaptiveWaveComponent
 from pinns_v2.rff import GaussianEncoding 
 import torch
 import torch.nn as nn
@@ -110,7 +110,11 @@ def ic_fn_vel(model, sample):
     ics = torch.zeros_like(dt)
     return dt, ics
 
-
+def ic_fn_u(model, sample):
+    """Initial position: u(0,x,y) = 0"""
+    u_pred = model(sample)
+    u_true = torch.ones_like(u_pred)*(-u_min)/delta_u
+    return u_pred, u_true
 batchsize = 500
 learning_rate = 0.002203836177626117
 
@@ -125,22 +129,43 @@ validationDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, batch
 print("Building Validation IC Dataset")
 validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), batchsize, shuffle = False)
 
-encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=300)
-model = MLP([num_inputs] + [600]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
+#encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=300)
+#model = MLP([num_inputs] + [600]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
 #model = TimeFourierMLP([num_inputs] + [308]*8 + [1], nn.SiLU, sigma = 1.0, encoded_size=154, hard_constraint_fn = hard_constraint, p_dropout=0.0)
-
+model = SimpleSpatioTemporalFFN(
+    spatial_sigmas=[1.0],  # From paper section 4.3
+    temporal_sigmas=[1.0,10.0],
+    hidden_layers=[200]*3, 
+    activation=nn.Tanh,
+    hard_constraint_fn=hard_constraint
+)
 
 component_manager = ComponentManager()
-r = ResidualComponent([pde_fn], domainDataset)
-component_manager.add_train_component(r)
-ic = ICComponent([ic_fn_vel], icDataset)
-component_manager.add_train_component(ic)
-#d = SupervisedComponent(dsdDataset)
-#component_manager.add_train_component(d)
+ntk_component = NTKAdaptiveWaveComponent(
+    pde_fn=pde_fn,
+    ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
+    dataset=domainDataset,
+    ic_dataset=icDataset,
+    update_freq=1000,
+    min_lambda=0.1,
+    max_lambda=1000.0,
+)
+component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
 component_manager.add_validation_component(r)
-ic = ICComponent([ic_fn_vel], validationicDataset)
+ic = ICComponent([ic_fn_u,ic_fn_vel], validationicDataset)
 component_manager.add_validation_component(ic)
+
+# r = ResidualComponent([pde_fn], domainDataset)
+# component_manager.add_train_component(r)
+# ic = ICComponent([ic_fn_vel], icDataset)
+# component_manager.add_train_component(ic)
+# #d = SupervisedComponent(dsdDataset)
+# #component_manager.add_train_component(d)
+# r = ResidualComponent([pde_fn], validationDataset)
+# component_manager.add_validation_component(r)
+# ic = ICComponent([ic_fn_vel], validationicDataset)
+# component_manager.add_validation_component(ic)
 
 
 def init_normal(m):
