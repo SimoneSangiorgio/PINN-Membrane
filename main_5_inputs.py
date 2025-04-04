@@ -22,7 +22,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # l_r = 0.05, num_dense_layers = 10, num_dense_nodes = 5, activation_function = Sin>
 # epochs = 1444, step_lr_epochs = 2000, step_lr_gamma = 0.01, period = 5, dataset_size = 10000
 
-epochs = 1000
+epochs = 5000
 num_inputs = 3 #x, y, x_f1, y_f1, t
 
 u_min = -0.21
@@ -61,7 +61,7 @@ def hard_constraint(x_in, y_out):
     t = tau*t_f
     u = y_out*delta_u + u_min
 
-    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)*t
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)
 
     U = (u-u_min)/delta_u
     return U
@@ -146,7 +146,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_fns=[ic_fn_u, ic_fn_vel],  # Both position and velocity ICs
     dataset=domainDataset,
     ic_dataset=icDataset,
-    update_freq=1000,
+    update_freq=100,
     min_lambda=0.1,
     max_lambda=1000.0,
 )
