@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_600.pt')
+model_path = os.path.join(model_dir, 'model.pt')
 
 video_output = False
 
@@ -71,7 +71,7 @@ def hard_constraint(x, y_out):
     t = tau*t_f
     u = y_out*delta_u + u_min
 
-    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)*t
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)
 
     U = (u-u_min)/delta_u
     return U

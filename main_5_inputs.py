@@ -22,7 +22,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # l_r = 0.05, num_dense_layers = 10, num_dense_nodes = 5, activation_function = Sin>
 # epochs = 1444, step_lr_epochs = 2000, step_lr_gamma = 0.01, period = 5, dataset_size = 10000
 
-epochs = 5000
+epochs = 10000
 num_inputs = 3 #x, y, x_f1, y_f1, t
 
 u_min = -0.21
@@ -148,7 +148,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_dataset=icDataset,
     update_freq=100,
     min_lambda=0.1,
-    max_lambda=1000.0,
+    max_lambda=10000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
