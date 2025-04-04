@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_MLP.pt')
+model_path = os.path.join(model_dir, 'model_5_input.pt')
 
 video_output = False
 
@@ -61,7 +61,7 @@ def load_params(path):
 load_params(os.path.join(output_dir, "params.json"))
 
 
-def hard_constraint2(x, y_out):
+def hard_constraint(x, y_out):
     X = x[:, 0].reshape(-1, 1)
     Y = x[:, 1].reshape(-1, 1)
     tau = x[:, -1].reshape(-1, 1)
@@ -71,7 +71,7 @@ def hard_constraint2(x, y_out):
     t = tau*t_f
     u = y_out*delta_u + u_min
 
-    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)
+    u = u*(x-x_max)*(x-x_min)*(y-y_max)*(y-y_min)*t
 
     U = (u-u_min)/delta_u
     return U
