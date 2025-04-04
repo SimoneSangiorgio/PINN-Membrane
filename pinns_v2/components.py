@@ -266,10 +266,7 @@ class NTKAdaptiveWaveComponent(Component):
             # --- Weight Update Logic ---
             # Avoid division by zero or very small traces which cause explosion
             eps = 1e-8
-            if trace_u.abs() < eps or trace_ut.abs() < eps or trace_r.abs() < eps or torch.isnan(trace_u) or torch.isnan(trace_ut) or torch.isnan(trace_r):
-                print(f"Warning: Very small or invalid trace encountered (u:{trace_u:.2e}, ut:{trace_ut:.2e}, r:{trace_r:.2e}). Skipping weight update.")
-                model.train() # Set back to training mode
-                return # Skip update
+            
 
             total_trace = trace_u + trace_ut + trace_r
 

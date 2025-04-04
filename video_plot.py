@@ -15,7 +15,7 @@ from scipy.io import savemat, loadmat
 import time
 
 name = "output"
-experiment_name = "membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_2"
+experiment_name = "membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_3"
 current_file = os.path.abspath(__file__)
 output_dir = os.path.join(os.path.dirname(current_file), name)
 output_dir = os.path.join(output_dir, experiment_name)
@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model.pt')
+model_path = os.path.join(model_dir, 'model_1000.pt')
 
 video_output = False
 
@@ -52,6 +52,7 @@ def load_params(path):
         f_min = params["f_min"]
         f_max = params["f_max"]
         t_f = params["t_f"]
+        print(t_f)
         delta_u = u_max - u_min
         delta_x = x_max - x_min
         delta_f = f_max - f_min
