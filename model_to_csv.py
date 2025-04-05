@@ -1,18 +1,22 @@
 import torch
-from model_structure import model, hard_constraint2
+from main_membrane import *
 import numpy as np
 import pandas as pd
+from pathinator import model_path, csv_simulation_path 
 
-
-model = torch.load('C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN Medical\\model_1400.pt', 
-                        map_location=torch.device('cpu'), weights_only=False)
+model = torch.load(model_path, map_location=torch.device('cpu'), weights_only=False)
 
 model.eval()
 
+input_data = torch.tensor([8.25, 0.7, 0.8])
+output = model(input_data)*delta_u + u_min
+print(output)
+
 # Definisci la griglia di (x, y) e i valori di t
-x_vals = np.linspace(0, 1, 11)  # 100 valori di x tra 0 e 1
-y_vals = np.linspace(0, 1, 11)  # 100 valori di y tra 0 e 1
-t_vals = np.linspace(0, 10, 201)   # 50 valori di t tra 0 e 1
+x_step, y_step = 0.1, 0.1
+t_vals = np.linspace(0, 1, 201)
+x_vals = np.arange(x_min, x_max + x_step, x_step)
+y_vals = np.arange(y_min, y_max + y_step, y_step)
 
 # Crea una lista per i risultati
 results = []
@@ -32,11 +36,12 @@ for x in x_vals:
                 output = model(input_tensor).numpy()
 
             # Aggiungi i risultati alla lista
-            z = output[0]  # Supponiamo che il modello restituisca un array di dimensione [1, 1]
-            results.append([format_number(t), format_number(x), format_number(y), format_number(z)])
+            z_norm = output[0]*delta_u + u_min  # Supponiamo che il modello restituisca un array di dimensione [1, 1]
+            results.append([format_number(t*t_f), format_number(x), format_number(y), z_norm])
+            #results.append([t, x, y, z_norm])
 
 # Crea un DataFrame e salvalo come CSV
 df = pd.DataFrame(results)
-df.to_csv('C:\\Users\\simon\\OneDrive\\Desktop\\Progetti Ingegneria\\PINN Medical\\membrane_simulation1.csv', index=False, header=False)
+df.to_csv(csv_simulation_path, index=False, header=False)
 
 print("File CSV creato con successo.")
