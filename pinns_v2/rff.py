@@ -5,7 +5,7 @@ from typing import Optional
 from torch import Tensor
 
 
-def sample_b(sigma: float, size: tuple) -> Tensor:
+def sample_b(sigma: float, size: tuple, device = None) -> Tensor:
     r"""Matrix of size :attr:`size` sampled from from :math:`\mathcal{N}(0, \sigma^2)`
 
     Args:
@@ -14,7 +14,8 @@ def sample_b(sigma: float, size: tuple) -> Tensor:
 
     See :class:`~rff.layers.GaussianEncoding` for more details
     """
-    return torch.randn(size) * sigma
+    device = device if device != None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.randn(size).to(device=device) * sigma
 
 
 #@torch.jit.script
@@ -56,15 +57,24 @@ class GaussianEncoding(nn.Module):
                 :attr:`sigma`, :attr:`input_size`, or :attr:`encoded_size` is not provided.
         """
         super().__init__()
-        if b is None:
-            if sigma is None or input_size is None or encoded_size is None:
+        self.b = b
+        self.sigma = sigma
+        self.encoded_size = encoded_size
+        self.input_size = input_size
+
+        if self.b is None:
+            if self.sigma is None or self.input_size is None or self.encoded_size is None:
                 raise ValueError(
                     'Arguments "sigma," "input_size," and "encoded_size" are required.')
-
-            b = sample_b(sigma, (encoded_size, input_size))
-        elif sigma is not None or input_size is not None or encoded_size is not None:
+        elif self.sigma is not None or self.input_size is not None or self.encoded_size is not None:
             raise ValueError('Only specify the "b" argument when using it.')
-        self.register_buffer('b', b)
+
+
+    def setup(self, model):
+        if self.b == None:
+            self.b = sample_b(self.sigma, (self.encoded_size, self.input_size))
+        self.register_buffer('enc', self.b)
+        model.layers[0] = self.encoded_size*2
 
     def forward(self, v: Tensor) -> Tensor:
         r"""Computes :math:`\gamma(\mathbf{v}) = (\cos{2 \pi \mathbf{B} \mathbf{v}} , \sin{2 \pi \mathbf{B} \mathbf{v}})`
