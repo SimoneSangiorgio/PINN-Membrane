@@ -1,0 +1,205 @@
+clear all
+close all
+clc
+
+%% Getting PINNs predictions
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Make video of the PINN prediction %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load("D:\GitHub\PINN-Membrane\output\membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_2\data_all.mat")
+n = size(pinn_data);
+n = n(1);
+tlist = linspace(0,5,n);
+
+%% Simulating PINNs with numerical methods
+
+cpu_time_start = cputime;
+
+c = 1;
+d = 1;
+a = 0;
+m = 1;
+
+numberOfPDE = 1;
+model = createpde(numberOfPDE);
+R1 = [3,4,0,1,1,0,0,0,1,1]';
+g = decsg(R1);
+geometryFromEdges(model,g);
+% pdegplot(model,"EdgeLabels","on"); 
+% ylim([-0.1 1.1]);
+% axis equal
+% title("Geometry With Edge Labels Displayed")
+% xlabel("x")
+% ylabel("y")
+
+specifyCoefficients(model,m=m,d=0,c=c,a=a,f=@force);
+
+applyBoundaryCondition(model,"dirichlet","Edge",[1,2,3,4],"u",0);
+%applyBoundaryCondition(model,"neumann","Edge",[2,4],"g",0);
+
+%applyBoundaryCondition(model,"dirichlet","Edge",[1,3],"u",0);
+%applyBoundaryCondition(model,"neumann","Edge",[1,2,3,4],"g",0);
+
+
+
+generateMesh(model);
+timeStruct = struct('time', 0);
+results = assembleFEMatrices(model, timeStruct);
+specifyCoefficients(model,m=m,d=d*results.M,c=c,a=a,f=@force);
+% figure
+% pdemesh(model);
+% ylim([-0.1 1.1]);
+% axis equal
+% xlabel x
+% ylabel y
+
+
+u0 = @(location) 0;% atan(cos(pi/2*location.x));
+ut0 = @(location) 0;% 3*sin(pi*location.x).*exp(sin(pi/2*location.y));
+setInitialConditions(model,u0,ut0);
+
+
+model.SolverOptions.ReportStatistics ='on';
+result = solvepde(model,tlist);
+
+cpu_time_end = cputime-cpu_time_start
+
+u = result.NodalSolution;
+umax = max(max(u));
+umin = min(min(u));
+
+%% PLOT MATLAB SOLUTION
+
+for i=1:length(tlist)
+    pdeplot(model,"XYData",u(:,i),"ZData",u(:,i), ...
+                  "ZStyle","continuous","Mesh","off");
+    axis([0 1 0 1 umin umax]); 
+    xlabel x
+    ylabel y
+    zlabel u
+    title("Numerical - t="+tlist(i))
+    M(i) = getframe;
+end
+movie(M)
+%% Plotting
+
+figure
+umax = max(max(u));
+umin = min(min(u));
+for i = 1:n
+    subplot(1, 2, 1)
+    pdeplot(model,"XYData",u(:,i),"ZData",u(:,i), ...
+                  "ZStyle","continuous","Mesh","off");
+    hold on
+    grid on
+    hold off
+    axis([0 1 0 1 umin umax]); 
+    xlabel x
+    ylabel y
+    zlabel u
+    title("Numerical - t="+tlist(i))
+    
+    subplot(1, 2, 2)
+    %surf(X_pinn, Y_pinn, squeeze(pinn_data(i, :, :)))
+    [xq,yq] = meshgrid(0:0.05:1, 0:0.05:1);
+    vq = griddata(X_pinn',Y_pinn',pinn_data(i, :),xq,yq);
+    surf(xq, yq, vq)
+    axis([0 1 0 1 umin umax]); 
+    xlabel x
+    ylabel y
+    zlabel u
+    colorbar
+    shading interp
+    title("Predicted - t="+tlist(i))
+
+    exportgraphics(gcf,'testAnimated.gif','Append',true);
+    %pause
+end
+
+%movie(M)
+
+%% Get L2 norm of error
+
+pinn_sol = pinn_data';
+x = X_pinn';
+y = Y_pinn';
+
+err_ = (pinn_sol - result.NodalSolution);
+figure
+for i = 1:n
+    [xq,yq] = meshgrid(0:0.001:1, 0:0.001:1);
+    vq = griddata(x,y,err_(:, i),xq,yq);
+    mesh(xq,yq,vq);
+    title("t = "+tlist(i))
+    pause(0.001)
+end  
+%%
+
+pinn_sol = pinn_data';
+x = X_pinn';
+y = Y_pinn';
+
+err = (pinn_sol - result.NodalSolution).^2;
+L2_time = sqrt(sum(err, 1));
+MSE_time = sum(err, 1).*(1/n(1));
+
+L2_space = sqrt(sum(err, 2));
+MSE_space = sum(err, 2).*(1/n(1));
+
+figure
+plot(tlist, L2_time);
+title("L2 error norm")
+xlabel("t [s]")
+ylabel("error")
+exportgraphics(gcf, "membrane_L2_time.pdf", 'ContentType','vector')
+
+figure
+plot(tlist, MSE_time);
+title("Mean Squared Error")
+xlabel("t [s]")
+ylabel("MSE")
+exportgraphics(gcf, "membrane_MSE_time.pdf", 'ContentType','vector')
+
+
+% [xq,yq] = meshgrid(0:0.001:1, 0:0.001:1);
+% vq = griddata(x,y,MSE_space,xq,yq);
+% figure
+% mesh(xq,yq,vq)
+
+figure 
+[xq,yq] = meshgrid(0:0.05:1, 0:0.05:1);
+vq = griddata(x,y,L2_space,xq,yq);
+pcolor(xq,yq,vq)
+colorbar
+% scatter(x, y, 10, L2_space, "filled")
+title("L2 error norm")
+xlabel("x [m]")
+ylabel("y [m]")
+exportgraphics(gcf, "membrane_L2_space.pdf", 'ContentType','vector')
+
+figure 
+[xq,yq] = meshgrid(0:0.05:1, 0:0.05:1);
+vq = griddata(x,y,MSE_space,xq,yq);
+pcolor(xq,yq,vq)
+colorbar
+% hold on
+% scatter(x, y, 10, MSE_space, "filled")
+title("Mean Squared Error")
+xlabel("x [m]")
+ylabel("y [m]")
+exportgraphics(gcf, "membrane_MSE_space.pdf", 'ContentType','vector')
+
+
+%%
+
+function fcoeff=force(location, state)
+    t1 = 0.3*5;
+    %t2 = 0.6*10;
+    %f1 = -3*exp(-400.*((location.x-0.7).^2).*((location.y-0.7).^2)).*exp(-(state.time - t1)^2/(2*0.5^2));
+    %f2 = -3*exp(-400.*((location.x-0.3).^2).*((location.y-0.3).^2)).*exp(-(state.time - t2)^2/(2*0.5^2));
+    f1 = -3*exp(-100.*(((location.x-0.5).^2)+((location.y-0.5).^2))).*exp(-(state.time - t1)^2/(2*0.5^2));
+    %f2 = -3*exp(-400.*(((location.x-0.3).^2)+((location.y-0.3).^2))).*exp(-(state.time - t2)^2/(2*0.5^2));
+    fcoeff = f1;%+f2;
+end
+

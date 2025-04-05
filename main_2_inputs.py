@@ -10,7 +10,7 @@ from pinns_v2.train import train
 from pinns_v2.gradient import _jacobian, _hessian
 from pinns_v2.dataset import DomainDataset, ICDataset, DomainSupervisedDataset
 
-epochs = 1000
+epochs = 10
 num_inputs = 3 #x, y, t
 
 #spatial_dim = 2  # x, y
@@ -141,6 +141,7 @@ layers = [num_inputs] + [308]*8 + [1]
 encoding = GaussianEncoding(sigma = 1.0, input_size=num_inputs, encoded_size=154)
 #encoding = FourierFeatureEncoding(input_size=num_inputs, encoded_size=154, sigma=1.0)
 # model = ImprovedMLP(layers, nn.SiLU, hard_constraint, p_dropout=0.0, encoding = None)
+
 model = SimpleSpatioTemporalFFN(
     spatial_sigmas=[1.0],  # From paper section 4.3
     temporal_sigmas=[1.0,10.0],
@@ -197,4 +198,4 @@ train(data, output_to_file=False)
 
 
 # Salva i parametri del modello in un file
-torch.save(model.state_dict(), 'result\\model_{}_epochs.pth'.format(epochs))
+torch.save(model, 'result\\model_{}_epochs.pth'.format(epochs))
