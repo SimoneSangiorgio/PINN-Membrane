@@ -15,7 +15,7 @@ from scipy.io import savemat, loadmat
 import time
 
 name = "output"
-experiment_name = "membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_3"
+experiment_name = "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs"
 current_file = os.path.abspath(__file__)
 output_dir = os.path.join(os.path.dirname(current_file), name)
 output_dir = os.path.join(output_dir, experiment_name)
@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_10000.pt')
+model_path = os.path.join(model_dir, 'model_10k.pt')
 
 video_output = False
 
@@ -154,7 +154,7 @@ mdic = {"pinn_data": preds, "X_pinn": x, "Y_pinn": y}
 savemat(output_dir+"/data_all.mat", mdic)
 
 
-node_path = "output/membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_3/nodes.mat"
+node_path = ""
 if os.path.exists(node_path):
     print("Loading nodes from file")
     start_time = time.time()

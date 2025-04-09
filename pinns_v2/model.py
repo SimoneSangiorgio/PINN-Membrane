@@ -317,3 +317,132 @@ class SimpleSpatioTemporalFFN(nn.Module):
             out = self.hard_constraint_fn(x, out) # Pass original combined input
 
         return out
+
+
+class SpatioTemporalFFN(nn.Module): 
+    def __init__(self,
+                 spatial_feature_indices: list[int],
+                 temporal_indices: list[int],
+                 spatial_sigmas: list[float],
+                 temporal_sigmas: list[float],
+                 # hidden_layers defines FFN output AND shared MLP structure
+                 hidden_layers: list[int], # E.g., [200, 200, 200, 200]
+                 activation: nn.Module,
+                 hard_constraint_fn=None):
+        """
+        Spatio-Temporal Fourier Feature Network (based on Fig 8b, arXiv:2012.10047v1).
+        Mimics the structure of SimpleSpatioTemporalFFN reference but uses
+        indices to select features/coordinates for spatial and temporal paths.
+        Encodes features specified by spatial_feature_indices spatially,
+        and coordinates specified by temporal_indices temporally.
+
+        Args:
+            spatial_feature_indices (list[int]): Indices for features encoded spatially.
+            temporal_indices (list[int]): Indices for temporal coordinates.
+            spatial_sigmas (list[float]): Sigmas for spatial feature FFN.
+            temporal_sigmas (list[float]): Sigmas for temporal coordinate FFN.
+            hidden_layers (list[int]): Defines network structure.
+                                       hidden_layers[0]: Output size of FFN encoding (must be even)
+                                                         AND input size to the first shared MLP layer.
+                                       hidden_layers[1:]: Sizes of subsequent layers in the shared MLP.
+            activation (nn.Module): Activation function class for the MLP.
+            hard_constraint_fn (callable, optional): Applied to original input and network output.
+        """
+        super().__init__() # Call superclass init
+
+        if not hidden_layers or len(hidden_layers) < 2:
+            raise ValueError("hidden_layers must have at least two elements (FFN size, MLP output size).")
+        if hidden_layers[0] % 2 != 0:
+             print(f"Warning: FFN output size ({hidden_layers[0]}) should ideally be even.")
+
+        self.spatial_sigmas = spatial_sigmas if spatial_sigmas else []
+        self.temporal_sigmas = temporal_sigmas if temporal_sigmas else []
+        self.spatial_feature_indices = spatial_feature_indices
+        self.temporal_indices = temporal_indices
+        self.hard_constraint_fn = hard_constraint_fn
+
+        self.num_spatial_features = len(self.spatial_feature_indices)
+        self.num_temporal_dims = len(self.temporal_indices)
+        self.ffn_output_size = hidden_layers[0] # e.g., 200
+        self.num_freq = self.ffn_output_size // 2 # e.g., 100
+
+        # --- Register B matrices as buffers ---
+        if self.num_spatial_features > 0 and self.spatial_sigmas:
+            for i, s in enumerate(self.spatial_sigmas):
+                b_matrix = torch.randn(self.num_freq, self.num_spatial_features) * s
+                self.register_buffer(f"spatial_B_{i}", b_matrix)
+        if self.num_temporal_dims > 0 and self.temporal_sigmas:
+             for i, s in enumerate(self.temporal_sigmas):
+                b_matrix = torch.randn(self.num_freq, self.num_temporal_dims) * s
+                self.register_buffer(f"temporal_B_{i}", b_matrix)
+        # --- End B matrices ---
+
+        # --- Shared MLP ---
+        self.mlp = nn.Sequential()
+        current_size = self.ffn_output_size
+        if len(hidden_layers) > 1:
+            for i in range(len(hidden_layers) - 1):
+                self.mlp.append(nn.Linear(current_size, hidden_layers[i+1]))
+                self.mlp.append(activation())
+                current_size = hidden_layers[i+1]
+        self.mlp_output_size = current_size
+        # --- End MLP ---
+
+        # --- Final Layer ---
+        num_spatial_branches = max(1, len(self.spatial_sigmas)) if self.num_spatial_features > 0 else 1
+        num_temporal_branches = max(1, len(self.temporal_sigmas)) if self.num_temporal_dims > 0 else 1
+        final_layer_input_size = num_spatial_branches * num_temporal_branches * self.mlp_output_size
+        self.final = nn.Linear(final_layer_input_size, 1)
+        # --- End Final Layer ---
+
+    def forward(self, x):
+        """Forward pass mimicking SimpleSpatioTemporalFFN structure."""
+        original_input = x # Keep for hard constraints
+
+        # --- Select feature subsets based on indices ---
+        x_spatial_features = x[..., self.spatial_feature_indices] if self.num_spatial_features > 0 else None
+        x_temporal_coords = x[..., self.temporal_indices] if self.num_temporal_dims > 0 else None
+
+        # --- Process spatial features ---
+        spatial_mlp_outputs = []
+        if x_spatial_features is not None and self.spatial_sigmas:
+            for i in range(len(self.spatial_sigmas)):
+                B = getattr(self, f"spatial_B_{i}")
+                proj = 2 * math.pi * x_spatial_features @ B.T
+                encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+                processed = self.mlp(encoded)
+                spatial_mlp_outputs.append(processed)
+        else:
+            placeholder_shape = list(x.shape[:-1]) + [self.mlp_output_size]
+            placeholder = torch.ones(placeholder_shape, device=x.device)
+            spatial_mlp_outputs.append(placeholder)
+
+        # --- Process temporal features ---
+        temporal_mlp_outputs = []
+        if x_temporal_coords is not None and self.temporal_sigmas:
+            for i in range(len(self.temporal_sigmas)):
+                B = getattr(self, f"temporal_B_{i}")
+                proj = 2 * math.pi * x_temporal_coords @ B.T
+                encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+                processed = self.mlp(encoded)
+                temporal_mlp_outputs.append(processed)
+        else:
+            placeholder_shape = list(x.shape[:-1]) + [self.mlp_output_size]
+            placeholder = torch.ones(placeholder_shape, device=x.device)
+            temporal_mlp_outputs.append(placeholder)
+
+        # --- Combine features: element-wise product for each pair ---
+        combined_features = []
+        for s_feat in spatial_mlp_outputs:
+            for t_feat in temporal_mlp_outputs:
+                combined_features.append(s_feat * t_feat)
+
+        # --- Concatenate results and pass through final layer ---
+        final_input_tensor = torch.cat(combined_features, dim=-1)
+        out = self.final(final_input_tensor)
+
+        # --- Apply hard constraints ---
+        if self.hard_constraint_fn:
+            out = self.hard_constraint_fn(original_input, out)
+
+        return out
