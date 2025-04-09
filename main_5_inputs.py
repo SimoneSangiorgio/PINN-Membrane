@@ -133,7 +133,7 @@ validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1),
 #model = MLP([num_inputs] + [600]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
 #model = TimeFourierMLP([num_inputs] + [308]*8 + [1], nn.SiLU, sigma = 1.0, encoded_size=154, hard_constraint_fn = hard_constraint, p_dropout=0.0)
 model = SimpleSpatioTemporalFFN(
-    spatial_sigmas=[1.0],  # From paper section 4.3
+    spatial_sigmas=[1.0,10.0],  # From paper section 4.3
     temporal_sigmas=[1.0,10.0],
     hidden_layers=[200]*3, 
     activation=nn.Tanh,

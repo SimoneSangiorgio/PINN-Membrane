@@ -24,7 +24,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_1000.pt')
+model_path = os.path.join(model_dir, 'model_10000.pt')
 
 video_output = False
 
@@ -154,10 +154,13 @@ mdic = {"pinn_data": preds, "X_pinn": x, "Y_pinn": y}
 savemat(output_dir+"/data_all.mat", mdic)
 
 
-node_path = "nodes.mat"
+node_path = "output/membrane_5inputs_force_time_damping_ic0hard_icv0_t5.0_MLP_rff1.0_12000epochs_3/nodes.mat"
 if os.path.exists(node_path):
+    print("Loading nodes from file")
     start_time = time.time()
-    nodes = loadmat(node_path)["nodes"]
+    mat_contents = loadmat(node_path)
+    print("Variables found in MAT file:", mat_contents.keys())
+    nodes = loadmat(node_path)["a"]
     x = nodes[0, :].reshape(-1, 1)
     y = nodes[1, :].reshape(-1, 1)
     X = compose_input(x, y, tt, meshgrid=False)
