@@ -126,16 +126,16 @@ validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1),
 
 #encoding = GaussianEncoding(sigma = 10.0, input_size=num_inputs, encoded_size=154)
 #model = MLP([num_inputs] + [308]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
-#model = TimeFourierMLP([num_inputs] + [308]*8 + [1], nn.SiLU, sigma = 10.0, encoded_size=154, hard_constraint_fn = hard_constraint, p_dropout=0.0)
+# model = TimeFourierMLP([num_inputs] + [308]*8 + [1], nn.SiLU, sigma = 10.0, encoded_size=154, hard_constraint_fn = hard_constraint, p_dropout=0.0)
 
 
 
 model = SpatioTemporalFFN(
     spatial_feature_indices=[0,1,2,3,4],  # x and y, xf and yf and h
     temporal_indices=[5],  # t
-    spatial_sigmas=[1.0],  # From paper section 4.3
+    spatial_sigmas=[1.0,10.0],  # From paper section 4.3
     temporal_sigmas=[1.0,10.0],
-    hidden_layers=[200]*3,
+    hidden_layers=[400]*6, #raddoppiati
     activation=nn.Tanh,
     hard_constraint_fn=hard_constraint
 )
@@ -148,7 +148,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_dataset=icDataset,
     update_freq=100,
     min_lambda=0.1,
-    max_lambda=10000.0,
+    max_lambda=100000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
@@ -170,7 +170,7 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.1591305
 # optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 data = {
-    "name": "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs",
+    "name": "membrane_6inputs_FFN_400",
     #"name": "prova",
     "model": model,
     "epochs": epochs,
