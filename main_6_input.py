@@ -31,7 +31,7 @@ x_min = 0.0
 x_max = 1.0
 y_min = 0.0
 y_max = 1.0
-t_f = 10
+t_f = 10.0
 f_min = -3.0
 f_max = 0.0
 delta_u = u_max - u_min
@@ -72,8 +72,10 @@ def f(sample):
     x_f = sample[2]*(delta_x) + x_min
     y_f = sample[3]*(delta_y) + y_min
     h = sample[4]*(delta_f) + f_min
+    t = sample[5]*t_f
+    t_1 = 0.3*t_f
     
-    z = h * torch.exp(-400*((x-x_f)**2)*((y-y_f)**2))
+    z = h * torch.exp(-400*((x-x_f)**2)*((y-y_f)**2))*torch.exp(-(t-t_1)**2/(2*0.5**2))
     return z
 
 
@@ -134,7 +136,7 @@ model = SpatioTemporalFFN(
     spatial_feature_indices=[0,1,2,3,4],  # x and y, xf and yf and h
     temporal_indices=[5],  # t
     spatial_sigmas=[1.0,10.0],  # From paper section 4.3
-    temporal_sigmas=[1.0,10.0],
+    temporal_sigmas=[1.0],
     hidden_layers=[400]*6, #raddoppiati
     activation=nn.Tanh,
     hard_constraint_fn=hard_constraint
