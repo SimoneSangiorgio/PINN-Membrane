@@ -446,3 +446,254 @@ class SpatioTemporalFFN(nn.Module):
             out = self.hard_constraint_fn(original_input, out)
 
         return out
+    
+
+
+class EnhancedSpatioTemporalFFN(nn.Module):
+    def __init__(self,
+                 spatial_feature_indices: list[int],
+                 temporal_indices: list[int],
+                 static_param_indices: list[int], # Added argument
+                 spatial_sigmas: list[float],
+                 temporal_sigmas: list[float],
+                 hidden_layers: list[int],
+                 activation: nn.Module,
+                 hard_constraint_fn=None):
+        """
+        Enhanced Spatio-Temporal Fourier Feature Network.
+        Based on SpatioTemporalFFN but includes handling for additional static
+        parameters (specified by static_param_indices) which are concatenated
+        just before the final linear layer.
+
+        Args:
+            spatial_feature_indices (list[int]): Indices for features encoded spatially (e.g., x, y).
+            temporal_indices (list[int]): Indices for temporal coordinates (e.g., t).
+            static_param_indices (list[int]): Indices for static parameters (e.g., xf, yf, h).
+            spatial_sigmas (list[float]): Sigmas for spatial feature FFN.
+            temporal_sigmas (list[float]): Sigmas for temporal coordinate FFN.
+            hidden_layers (list[int]): Defines network structure.
+                                       hidden_layers[0]: Output size of FFN encoding (must be even)
+                                                         AND input size to the first shared MLP layer.
+                                       hidden_layers[1:]: Sizes of subsequent layers in the shared MLP.
+            activation (nn.Module): Activation function class for the MLP.
+            hard_constraint_fn (callable, optional): Applied to original input and network output.
+        """
+        super().__init__() # Call superclass init
+
+        if not hidden_layers or len(hidden_layers) < 2:
+            raise ValueError("hidden_layers must have at least two elements (FFN size, MLP output size).")
+        if hidden_layers[0] % 2 != 0:
+             print(f"Warning: FFN output size ({hidden_layers[0]}) should ideally be even.")
+
+        self.spatial_sigmas = spatial_sigmas if spatial_sigmas else []
+        self.temporal_sigmas = temporal_sigmas if temporal_sigmas else []
+        self.spatial_feature_indices = spatial_feature_indices
+        self.temporal_indices = temporal_indices
+        self.static_param_indices = static_param_indices # Store static indices
+        self.hard_constraint_fn = hard_constraint_fn
+
+        self.num_spatial_features = len(self.spatial_feature_indices)
+        self.num_temporal_dims = len(self.temporal_indices)
+        self.num_static_params = len(self.static_param_indices) # Store number of static params
+        self.ffn_output_size = hidden_layers[0] # e.g., 200
+        self.num_freq = self.ffn_output_size // 2 # e.g., 100
+
+        # --- Register B matrices as buffers ---
+        if self.num_spatial_features > 0 and self.spatial_sigmas:
+            for i, s in enumerate(self.spatial_sigmas):
+                b_matrix = torch.randn(self.num_freq, self.num_spatial_features) * s
+                self.register_buffer(f"spatial_B_{i}", b_matrix)
+        if self.num_temporal_dims > 0 and self.temporal_sigmas:
+             for i, s in enumerate(self.temporal_sigmas):
+                b_matrix = torch.randn(self.num_freq, self.num_temporal_dims) * s
+                self.register_buffer(f"temporal_B_{i}", b_matrix)
+        # --- End B matrices ---
+
+        # --- Shared MLP ---
+        self.mlp = nn.Sequential()
+        current_size = self.ffn_output_size
+        if len(hidden_layers) > 1:
+            for i in range(len(hidden_layers) - 1):
+                self.mlp.append(nn.Linear(current_size, hidden_layers[i+1]))
+                self.mlp.append(activation())
+                current_size = hidden_layers[i+1]
+        self.mlp_output_size = current_size
+        # --- End MLP ---
+
+        # --- Final Layer (Input Size Modified) ---
+        num_spatial_branches = max(1, len(self.spatial_sigmas)) if self.num_spatial_features > 0 else 1
+        num_temporal_branches = max(1, len(self.temporal_sigmas)) if self.num_temporal_dims > 0 else 1
+        # Calculate size from combined MLP outputs + number of static parameters
+        final_layer_input_size = (num_spatial_branches * num_temporal_branches * self.mlp_output_size) + self.num_static_params # Modified calculation
+        self.final = nn.Linear(final_layer_input_size, 1)
+        # --- End Final Layer ---
+
+    def forward(self, x):
+        """Forward pass incorporating static parameters."""
+        original_input = x # Keep for hard constraints
+
+        # --- Select feature subsets based on indices ---
+        x_spatial_features = x[..., self.spatial_feature_indices] if self.num_spatial_features > 0 else None
+        x_temporal_coords = x[..., self.temporal_indices] if self.num_temporal_dims > 0 else None
+        static_params = x[..., self.static_param_indices] # Extract static parameters
+
+        # --- Process spatial features ---
+        spatial_mlp_outputs = []
+        if x_spatial_features is not None and self.spatial_sigmas:
+            for i in range(len(self.spatial_sigmas)):
+                B = getattr(self, f"spatial_B_{i}")
+                proj = 2 * math.pi * x_spatial_features @ B.T
+                encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+                processed = self.mlp(encoded)
+                spatial_mlp_outputs.append(processed)
+        else: # Placeholder if no spatial features/sigmas
+            # Determine the batch dimensions from the input 'x'
+            placeholder_shape = list(x.shape[:-1]) + [self.mlp_output_size]
+            placeholder = torch.ones(placeholder_shape, device=x.device)
+            spatial_mlp_outputs.append(placeholder)
+
+        # --- Process temporal features ---
+        temporal_mlp_outputs = []
+        if x_temporal_coords is not None and self.temporal_sigmas:
+            for i in range(len(self.temporal_sigmas)):
+                B = getattr(self, f"temporal_B_{i}")
+                proj = 2 * math.pi * x_temporal_coords @ B.T
+                encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+                processed = self.mlp(encoded)
+                temporal_mlp_outputs.append(processed)
+        else: # Placeholder if no temporal features/sigmas
+            placeholder_shape = list(x.shape[:-1]) + [self.mlp_output_size]
+            placeholder = torch.ones(placeholder_shape, device=x.device)
+            temporal_mlp_outputs.append(placeholder)
+
+        # --- Combine features: element-wise product for each pair ---
+        combined_features_mult = []
+        for s_feat in spatial_mlp_outputs:
+            for t_feat in temporal_mlp_outputs:
+                combined_features_mult.append(s_feat * t_feat)
+
+        # --- Concatenate combined MLP outputs ---
+        concatenated_mlp_outputs = torch.cat(combined_features_mult, dim=-1)
+
+        # --- Concatenate with static parameters ---
+        # Ensure static_params has the correct batch dimensions if necessary
+        # If x has batch dims, static_params extracted via slicing should retain them.
+        final_input_tensor = torch.cat([concatenated_mlp_outputs, static_params], dim=-1) # Concatenate here
+
+        # --- Pass through final layer ---
+        out = self.final(final_input_tensor)
+
+        # --- Apply hard constraints ---
+        if self.hard_constraint_fn:
+            out = self.hard_constraint_fn(original_input, out)
+
+        return out
+    
+
+class EnhancedSpatioTemporalFFN2(nn.Module):
+    def __init__(self,
+                 spatial_feature_indices: list[int],
+                 temporal_indices: list[int],
+                 static_param_indices: list[int],
+                 spatial_sigmas: list[float],
+                 temporal_sigmas: list[float],
+                 hidden_layers: list[int],
+                 activation: nn.Module,
+                 hard_constraint_fn=None):
+        super().__init__()
+        
+        # Store indices for input decomposition
+        self.spatial_feature_indices = spatial_feature_indices
+        self.temporal_indices = temporal_indices
+        self.static_param_indices = static_param_indices
+        
+        # Store hyperparameters
+        self.spatial_sigmas = spatial_sigmas
+        self.temporal_sigmas = temporal_sigmas
+        self.hard_constraint_fn = hard_constraint_fn
+        
+        # Spatial Fourier features
+        self.num_spatial_features = len(spatial_feature_indices)
+        self.spatial_ffn_output_size = hidden_layers[0]
+        self.num_spatial_freq = self.spatial_ffn_output_size // 2
+        
+        # Temporal Fourier features
+        self.num_temporal_dims = len(temporal_indices)
+        self.temporal_ffn_output_size = hidden_layers[0]
+        self.num_temporal_freq = self.temporal_ffn_output_size // 2
+        
+        # Register B matrices for Fourier features
+        self._register_fourier_matrices()
+        
+        # Shared MLP
+        self.mlp = nn.Sequential()
+        current_size = hidden_layers[0]
+        for i in range(len(hidden_layers) - 1):
+            self.mlp.append(nn.Linear(current_size, hidden_layers[i+1]))
+            self.mlp.append(activation())
+            current_size = hidden_layers[i+1]
+        
+        # Final layer accounting for static params
+        num_spatial_branches = max(1, len(spatial_sigmas))
+        num_temporal_branches = max(1, len(temporal_sigmas))
+        mlp_output_size = num_spatial_branches * num_temporal_branches * current_size
+        self.final = nn.Linear(mlp_output_size + len(static_param_indices), 1)
+
+    def _register_fourier_matrices(self):
+        # Spatial Fourier matrices
+        for i, s in enumerate(self.spatial_sigmas):
+            b_matrix = torch.randn(self.num_spatial_freq, self.num_spatial_features) * s
+            self.register_buffer(f"spatial_B_{i}", b_matrix)
+        
+        # Temporal Fourier matrices
+        for i, s in enumerate(self.temporal_sigmas):
+            b_matrix = torch.randn(self.num_temporal_freq, self.num_temporal_dims) * s
+            self.register_buffer(f"temporal_B_{i}", b_matrix)
+
+    def _apply_fourier_features(self, x, mode="spatial"):
+        features = []
+        sigmas = self.spatial_sigmas if mode == "spatial" else self.temporal_sigmas
+        
+        for i in range(len(sigmas)):
+            B = getattr(self, f"{mode}_B_{i}")
+            proj = 2 * math.pi * x @ B.T
+            encoded = torch.cat([torch.cos(proj), torch.sin(proj)], dim=-1)
+            processed = self.mlp(encoded)
+            features.append(processed)
+        
+        return features
+
+    def forward(self, x):
+        orig_x = x
+        
+        # Split input components
+        x_spatial = x[..., self.spatial_feature_indices]
+        x_time = x[..., self.temporal_indices]
+        static_params = x[..., self.static_param_indices]
+        
+        # Process spatial features
+        spatial_feats = self._apply_fourier_features(x_spatial, "spatial")
+        
+        # Process temporal features
+        temporal_feats = self._apply_fourier_features(x_time, "temporal")
+        
+        # Combine features through element-wise multiplication
+        combined_features = []
+        for s_feat in spatial_feats:
+            for t_feat in temporal_feats:
+                combined_features.append(s_feat * t_feat)
+        
+        # Concatenate all combined features
+        combined = torch.cat(combined_features, dim=-1)
+        
+        # Add static parameters
+        combined = torch.cat([combined, static_params], dim=-1)
+        
+        # Final projection
+        out = self.final(combined)
+        
+        # Apply hard constraints if specified
+        if self.hard_constraint_fn:
+            out = self.hard_constraint_fn(orig_x, out)
+            
+        return out

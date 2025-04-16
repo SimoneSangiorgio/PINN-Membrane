@@ -1,4 +1,4 @@
-from pinns_v2.model import MLP, ModifiedMLP, TimeFourierMLP, SpatioTemporalFFN
+from pinns_v2.model import MLP, ModifiedMLP, TimeFourierMLP, SpatioTemporalFFN, EnhancedSpatioTemporalFFN, EnhancedSpatioTemporalFFN2
 from pinns_v2.components import ComponentManager, ResidualComponent, ICComponent, NTKAdaptiveWaveComponent
 from pinns_v2.rff import GaussianEncoding 
 import torch
@@ -127,21 +127,30 @@ print("Building Validation IC Dataset")
 validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), batchsize, shuffle = False)
 
 #encoding = GaussianEncoding(sigma = 10.0, input_size=num_inputs, encoded_size=154)
-#model = MLP([num_inputs] + [308]*8 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
+#model = MLP([num_inputs] + [400]*6 + [1], nn.SiLU, hard_constraint, p_dropout=0.0, encoding = encoding)
 # model = TimeFourierMLP([num_inputs] + [308]*8 + [1], nn.SiLU, sigma = 10.0, encoded_size=154, hard_constraint_fn = hard_constraint, p_dropout=0.0)
 
 
 
-model = SpatioTemporalFFN(
-    spatial_feature_indices=[0,1,2,3,4],  # x and y, xf and yf and h
-    temporal_indices=[5],  # t
-    spatial_sigmas=[1.0,10.0],  # From paper section 4.3
+# model = SpatioTemporalFFN(
+#     spatial_feature_indices=[0,1,2,3,4],  # x and y, xf and yf and h
+#     temporal_indices=[5],  # t
+#     spatial_sigmas=[1.0,10.0],  # From paper section 4.3
+#     temporal_sigmas=[1.0],
+#     hidden_layers=[400]*6, #raddoppiati
+#     activation=nn.Tanh,
+#     hard_constraint_fn=hard_constraint
+# )
+model = EnhancedSpatioTemporalFFN2(
+    spatial_feature_indices=[0, 1],      # x, y
+    temporal_indices=[5],                # t
+    static_param_indices=[2, 3, 4],      # xf, yf, h (NEW argument)
+    spatial_sigmas=[1.0, 10.0],
     temporal_sigmas=[1.0],
-    hidden_layers=[400]*6, #raddoppiati
-    activation=nn.Tanh,
+    hidden_layers=[400]*6,
+    activation=nn.Tanh, 
     hard_constraint_fn=hard_constraint
 )
-
 component_manager = ComponentManager()
 ntk_component = NTKAdaptiveWaveComponent(
     pde_fn=pde_fn,
@@ -172,7 +181,7 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.1591305
 # optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 data = {
-    "name": "membrane_6inputs_FFN_400",
+    "name": "membrane_6inputs_EFFN",
     #"name": "prova",
     "model": model,
     "epochs": epochs,
