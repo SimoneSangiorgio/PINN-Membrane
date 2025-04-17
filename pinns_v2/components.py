@@ -320,7 +320,7 @@ class NTKAdaptiveWaveComponent(Component):
         loss_u = self.ic_u_loss.compute_loss(model, x_ic)
         loss_ut = self.ic_ut_loss.compute_loss(model, x_ic)
         loss_r = self.pde_loss.compute_loss(model, x_res)
-
+        print(f"Losses: u={loss_u:.2e}, ut={loss_ut:.2e}, r={loss_r:.2e}")
         # Check for invalid loss values before weighting
         if loss_u is None or torch.isnan(loss_u) or torch.isinf(loss_u) or \
            loss_ut is None or torch.isnan(loss_ut) or torch.isinf(loss_ut) or \

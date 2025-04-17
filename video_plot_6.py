@@ -25,7 +25,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_mlp.pt')
+model_path = os.path.join(model_dir, 'model_5000.pt')
 
 video_output = False
 
@@ -125,9 +125,11 @@ le = len(np.unique(X[:, -1]))
 true = ttrue.reshape((le, la), order="F")  """ 
 
 X = compose_input(x, y, x_f1, y_f1, h, tt)
+print(X[-1])
 preds = np.zeros(len(x)*len(y)*len(tt))
-batch = 10000
+batch = 100000
 for i in range(0, len(X), batch):
+    print(i, len(X))
     elem = X[i:i+batch]
     pred = model(elem)
     pred = pred.cpu().detach().numpy()
@@ -135,7 +137,7 @@ for i in range(0, len(X), batch):
     preds[i:i+batch] = pred.reshape(-1)
 
 preds = preds.reshape(len(tt), len(x), len(y))
-
+print(preds[0, :, :])
 
 
 counter = 0

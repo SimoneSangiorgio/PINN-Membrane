@@ -75,7 +75,7 @@ def f(sample):
     t = sample[5]*t_f
     t_1 = 0.3*t_f
     
-    z = h * torch.exp(-400*((x-x_f)**2)*((y-y_f)**2))*torch.exp(-(t-t_1)**2/(2*0.5**2))
+    z = h * torch.exp(-400*((x-x_f)**2) + ((y-y_f)**2))*torch.exp(-(t-t_1)**2/(2*0.5**2))
     return z
 
 
@@ -106,6 +106,7 @@ def ic_fn_vel(model, sample):
     dt = dtau*delta_u/t_f
     ics = torch.zeros_like(dt)
     return dt, ics
+
 def ic_fn_u(model, sample):
     """Initial position: u(0,x,y) = 0"""
     u_pred = model(sample)
@@ -113,10 +114,10 @@ def ic_fn_u(model, sample):
     return u_pred, u_true
 
 batchsize = 500
-learning_rate = 0.002203836177626117
+learning_rate = 1e-3
 
 print("Building Domain Dataset")
-domainDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, 10000, period = 3)
+domainDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, 8000, period = 3)
 print("Building IC Dataset")
 icDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 1000, period = 3)
 #print("Building Domain Supervised Dataset")
@@ -145,10 +146,10 @@ model = EnhancedSpatioTemporalFFN2(
     spatial_feature_indices=[0, 1],      # x, y
     temporal_indices=[5],                # t
     static_param_indices=[2, 3, 4],      # xf, yf, h (NEW argument)
-    spatial_sigmas=[1.0, 10.0],
+    spatial_sigmas=[1.0],
     temporal_sigmas=[1.0],
-    hidden_layers=[400]*6,
-    activation=nn.Tanh, 
+    hidden_layers=[256]*4,
+    activation=nn.SiLU, 
     hard_constraint_fn=hard_constraint
 )
 component_manager = ComponentManager()
@@ -159,7 +160,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_dataset=icDataset,
     update_freq=100,
     min_lambda=0.1,
-    max_lambda=100000.0,
+    max_lambda=10000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
@@ -177,7 +178,7 @@ model = model.to(device)
 # optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9,0.99),eps = 10**-15)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=20, factor=0.5)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1721, gamma=0.15913059595003437)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9997)
 # optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 data = {

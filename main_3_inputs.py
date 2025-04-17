@@ -22,7 +22,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # l_r = 0.05, num_dense_layers = 10, num_dense_nodes = 5, activation_function = Sin>
 # epochs = 1444, step_lr_epochs = 2000, step_lr_gamma = 0.01, period = 5, dataset_size = 10000
 
-epochs = 10000
+epochs = 1000
 num_inputs = 3 #x, y, x_f1, y_f1, t
 
 u_min = -0.21

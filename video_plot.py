@@ -14,6 +14,8 @@ import json
 from scipy.io import savemat, loadmat
 import time
 
+
+
 name = "output"
 experiment_name = "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs"
 current_file = os.path.abspath(__file__)
@@ -24,7 +26,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_10k.pt')
+model_path = os.path.join(model_dir, 'model_3_retest.pt')
 
 video_output = False
 
