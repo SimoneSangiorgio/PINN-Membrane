@@ -31,7 +31,7 @@ def hard_constraint(x, y_out):
 # !!! SET YOUR CORRECT EXPERIMENT NAME !!!
 experiment_name = "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs"
 # !!! SET YOUR CORRECT MODEL FILENAME !!!
-model_filename = 'model_force.pt'
+model_filename = 'model_rf_static_256_8.pt'
 
 # --- !!! IMPORTANT: FFmpeg Path !!! ---
 # Option 1: Set the path directly here if FFmpeg is NOT reliably in your system PATH
@@ -64,7 +64,7 @@ output_dir = os.path.join(script_dir, "output", experiment_name)
 model_path = os.path.join(output_dir, "model", model_filename)
 params_path = os.path.join(output_dir, "params.json")
 # --- Simplified Video Filename ---
-video_filename = "correct_force1.mp4"
+video_filename = "correct_force_256_8_fp_static.mp4"
 video_path = os.path.join(output_dir, video_filename)
 mat_path = os.path.join(output_dir, "data_all.mat") # Keep MAT filename consistent
 

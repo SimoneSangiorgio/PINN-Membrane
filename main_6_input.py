@@ -75,7 +75,7 @@ def f(sample):
     t = sample[5]*t_f
     t_1 = 0.3*t_f
     
-    z = h * torch.exp(-400*((x-x_f)**2) + ((y-y_f)**2))*torch.exp(-(t-t_1)**2/(2*0.5**2))
+    z = h * torch.exp(-400*(((x-x_f)**2) + ((y-y_f)**2)))*torch.exp(-(t-t_1)**2/(2*0.5**2))
     return z
 
 
@@ -117,7 +117,7 @@ batchsize = 500
 learning_rate = 1e-3
 
 print("Building Domain Dataset")
-domainDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, 8000, period = 3)
+domainDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, 10000, period = 3)
 print("Building IC Dataset")
 icDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 1000, period = 3)
 #print("Building Domain Supervised Dataset")
@@ -143,13 +143,13 @@ validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1),
 #     hard_constraint_fn=hard_constraint
 # )
 model = EnhancedSpatioTemporalFFN2(
-    spatial_feature_indices=[0, 1],      # x, y
+    spatial_feature_indices=[0, 1,2,3,4],      # x, y ,xf,yf
     temporal_indices=[5],                # t
-    static_param_indices=[2, 3, 4],      # xf, yf, h (NEW argument)
+    static_param_indices=[],      #  h (NEW argument)
     spatial_sigmas=[1.0],
-    temporal_sigmas=[1.0],
+    temporal_sigmas=[1.0,10.0],
     hidden_layers=[256]*4,
-    activation=nn.SiLU, 
+    activation=nn.Tanh, 
     hard_constraint_fn=hard_constraint
 )
 component_manager = ComponentManager()
@@ -160,7 +160,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_dataset=icDataset,
     update_freq=100,
     min_lambda=0.1,
-    max_lambda=10000.0,
+    max_lambda=100000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
