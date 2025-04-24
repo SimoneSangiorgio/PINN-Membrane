@@ -33,7 +33,7 @@ y_min = 0.0
 y_max = 1.0
 t_f = 10.0
 f_min = -3.0
-f_max = 0.0
+f_max = -1.0
 delta_u = u_max - u_min
 delta_x = x_max - x_min
 delta_y = y_max - y_min
@@ -74,8 +74,7 @@ def f(sample):
     h = sample[4]*(delta_f) + f_min
     t = sample[5]*t_f
     t_1 = 0.3*t_f
-    
-    z = h * torch.exp(-400*(((x-x_f)**2) + ((y-y_f)**2)))*torch.exp(-(t-t_1)**2/(2*0.5**2))
+    z = h * torch.exp(-100*(((x-x_f)**2) + ((y-y_f)**2)))*torch.exp(-(t-t_1)**2/(2*0.5**2))
     return z
 
 
@@ -119,7 +118,7 @@ learning_rate = 1e-3
 print("Building Domain Dataset")
 domainDataset = DomainDatasetRandom([0.0]*num_inputs,[1.0]*num_inputs, 10000, period = 3)
 print("Building IC Dataset")
-icDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 1000, period = 3)
+icDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1), 10000, period = 3)
 #print("Building Domain Supervised Dataset")
 #dsdDataset = DomainSupervisedDataset("C:\\Users\\desan\\Documents\\Wolfram Mathematica\\file.csv", 1000)
 print("Building Validation Dataset")
@@ -143,13 +142,13 @@ validationicDataset = ICDatasetRandom([0.0]*(num_inputs-1),[1.0]*(num_inputs-1),
 #     hard_constraint_fn=hard_constraint
 # )
 model = EnhancedSpatioTemporalFFN2(
-    spatial_feature_indices=[0, 1,2,3,4],      # x, y ,xf,yf
+    spatial_feature_indices=[0, 1, 2, 3, 4],      # x, y ,xf,yf
     temporal_indices=[5],                # t
     static_param_indices=[],      #  h (NEW argument)
     spatial_sigmas=[1.0],
-    temporal_sigmas=[1.0,10.0],
-    hidden_layers=[256]*4,
-    activation=nn.Tanh, 
+    temporal_sigmas=[1.0],
+    hidden_layers=[200]*3,
+    activation=nn.SiLU, 
     hard_constraint_fn=hard_constraint
 )
 component_manager = ComponentManager()
@@ -160,7 +159,7 @@ ntk_component = NTKAdaptiveWaveComponent(
     ic_dataset=icDataset,
     update_freq=100,
     min_lambda=0.1,
-    max_lambda=100000.0,
+    max_lambda=10000.0,
 )
 component_manager.add_train_component(ntk_component)
 r = ResidualComponent([pde_fn], validationDataset)
@@ -182,7 +181,7 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9997)
 # optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 data = {
-    "name": "membrane_6inputs_EFFN",
+    "name": "membrane_6inputs_EFFN_Fmax_-1",
     #"name": "prova",
     "model": model,
     "epochs": epochs,

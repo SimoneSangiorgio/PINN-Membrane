@@ -29,9 +29,9 @@ def hard_constraint(x, y_out):
     return U
 # --- Configuration ---
 # !!! SET YOUR CORRECT EXPERIMENT NAME !!!
-experiment_name = "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs"
+experiment_name = "membrane_6inputs_EFFN_Fmax_-1"
 # !!! SET YOUR CORRECT MODEL FILENAME !!!
-model_filename = 'model_rf_static_256_8.pt'
+model_filename = 'model_200_4_tanh.pt'
 
 # --- !!! IMPORTANT: FFmpeg Path !!! ---
 # Option 1: Set the path directly here if FFmpeg is NOT reliably in your system PATH
@@ -64,7 +64,7 @@ output_dir = os.path.join(script_dir, "output", experiment_name)
 model_path = os.path.join(output_dir, "model", model_filename)
 params_path = os.path.join(output_dir, "params.json")
 # --- Simplified Video Filename ---
-video_filename = "correct_force_256_8_fp_static.mp4"
+video_filename = "model_200_4_tanh.mp4" 
 video_path = os.path.join(output_dir, video_filename)
 mat_path = os.path.join(output_dir, "data_all.mat") # Keep MAT filename consistent
 
@@ -116,7 +116,7 @@ tt = np.linspace(0, t_f, num=num_t_steps_vid, endpoint=True)
 x_lin = np.linspace(x_min, x_max, num=num_x_steps_vid, endpoint=True)
 y_lin = np.linspace(y_min, y_max, num=num_y_steps_vid, endpoint=True)
 x_mesh, y_mesh = np.meshgrid(x_lin, y_lin)
-x_f1_fixed = 0.5; y_f1_fixed = 0.5; h_fixed = -3.0
+x_f1_fixed = 0.8; y_f1_fixed = 0.8; h_fixed = -3.0
 
 # --- Generate Input & Predict ---
 print("[*] Generating input and predicting...")
