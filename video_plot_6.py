@@ -16,7 +16,7 @@ from scipy.io import savemat, loadmat
 import time
 
 name = "output"
-experiment_name = "membrane_6inputs_nostiffness_force_damping_ic0hard_icv0_causality_t10.0_timerff10.0_2000epochs"
+experiment_name = "membrane_6inputs_EFFN_Fmax_-1"
 current_file = os.path.abspath(__file__)
 output_dir = os.path.join(os.path.dirname(current_file), name)
 output_dir = os.path.join(output_dir, experiment_name)
@@ -25,7 +25,7 @@ model_dir = os.path.join(output_dir, "model")
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 
-model_path = os.path.join(model_dir, 'model_100_forza.pt')
+model_path = os.path.join(model_dir, 'model_1_10_200_4.pt')
 
 video_output = False
 
@@ -110,9 +110,9 @@ tt = np.linspace(0, t_f, num=1001, endpoint=True)
 x = np.linspace(x_min, x_max, num=101, endpoint=True).reshape(-1, 1)
 y = np.linspace(y_min, y_max, num=101, endpoint=True).reshape(-1, 1)
 x, y = np.meshgrid(x, y)
-x_f1 = 0.5
-y_f1 = 0.5
-h = -3.0
+x_f1 = 0.8
+y_f1 = 0.8
+h = -1.0
 
 
 """ ttrue = exact()

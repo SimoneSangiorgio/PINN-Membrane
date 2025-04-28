@@ -146,8 +146,8 @@ model = EnhancedSpatioTemporalFFN2(
     temporal_indices=[5],                # t
     static_param_indices=[],      #  h (NEW argument)
     spatial_sigmas=[1.0],
-    temporal_sigmas=[1.0],
-    hidden_layers=[200]*3,
+    temporal_sigmas=[1.0,10.0],
+    hidden_layers=[200]*4,
     activation=nn.SiLU, 
     hard_constraint_fn=hard_constraint
 )
